@@ -338,6 +338,18 @@ describe("REST", () => {
     expect(((await own.json()) as Problem).details).toMatchObject({ reason: "client_details", invalid: ["email"] });
   });
 
+  it("names where an assistant reads what the business takes, on the door it came through", async () => {
+    const s = await setup();
+    const res = await s.call("POST", "/v1/orders", {
+      payload: { orderedItem: [{ productId: "no-such-product", quantity: 1 }] },
+      contact: RITA,
+    });
+    expect(res.status).toBe(403);
+    expect(((await res.json()) as Problem).detail).toBe(
+      "We take no orders here. What we take here: messages (item_types in GET /v1/business). Nothing was written.",
+    );
+  });
+
   it("says what to bring in /openapi.json", async () => {
     const s = await workshop();
     const doc = (await (await s.call("GET", "/openapi.json")).json()) as Record<string, unknown>;

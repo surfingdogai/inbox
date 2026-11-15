@@ -392,15 +392,16 @@ describe("doors elsewhere on a platform", () => {
       caps.checkAvailability({ service_id: service.id, from: "2026-10-13T09:00:00Z", to: "2026-10-14T09:00:00Z" }),
     );
     expect(error.code).toBe("not_allowed");
-    expect(error.message).toContain(`This business takes bookings at Fresha (${FRESHA}), not here`);
+    // In the business's voice, as every refusal at its doors, and to "your person" as every tool says it.
+    expect(error.message).toContain(`We take bookings at Fresha (${FRESHA}), not here: send your person there.`);
     // What still comes here is said only while it does: never a door that would refuse the agent too.
-    expect(error.message).toMatch(/Nothing was written\. Messages and quote requests still come here\.$/);
+    expect(error.message).toMatch(/Nothing was written\. We take messages and requests for a price here\.$/);
     const ask = () =>
       refusal(
         caps.checkAvailability({ service_id: service.id, from: "2026-10-13T09:00:00Z", to: "2026-10-14T09:00:00Z" }),
       );
     await caps.updateSettings(owner, { doc: { doors: { quoteRequest: false } } });
-    expect((await ask()).message).toMatch(/Nothing was written\. Messages still come here\.$/);
+    expect((await ask()).message).toMatch(/Nothing was written\. We take messages here\.$/);
     await caps.updateSettings(owner, { doc: { doors: { message: false } } });
     expect((await ask()).message).toMatch(/Nothing was written\.$/);
     expect(error.details).toEqual({

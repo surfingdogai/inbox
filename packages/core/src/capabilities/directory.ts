@@ -27,6 +27,7 @@ import {
 } from "../settings/schema";
 import { lodgingProfile } from "../stays/public";
 import { listProperties, type PropertySetup, readSetup } from "../stays/store";
+import type { Caller } from "../write/caller";
 import { WriteError } from "../write/errors";
 import { businessCurrency } from "../write/pricing";
 import { dateLocaliser, readClosures } from "./closures";
@@ -187,20 +188,55 @@ const KIND_WORDS: Record<ItemType, string> = {
 };
 
 /**
- * The refusal of an assistant's request of a kind this business does not take here (ADR-048), naming what it
- * does take: `403 not_allowed`, `details.reason` `<kind>_not_offered`, with the item types it takes.
+ * Where an assistant reads the kinds a business takes, on the door it came through: the MCP tool, the REST route,
+ * or, from anywhere else, the profile in words.
+ */
+export function profileWhere(caller?: Pick<Caller, "actor">): string {
+  const channel = caller?.actor.channel;
+  if (channel === "mcp_public" || channel === "mcp_owner") return "item_types in get_business_profile";
+  if (channel === "rest") return "item_types in GET /v1/business";
+  return "item_types in our profile";
+}
+
+/** The kinds a business takes here, but `kind`, as a sentence lists them: "messages and requests for a price". */
+export function takenHere(offered: readonly ItemType[], kind?: ItemType): string {
+  const takes = offered.filter((t) => t !== kind && t !== "refund").map((t) => KIND_WORDS[t]);
+  return takes.length > 1 ? `${takes.slice(0, -1).join(", ")} and ${takes[takes.length - 1]}` : (takes[0] ?? "");
+}
+
+/**
+ * The refusal of an assistant's request of a kind this business does not take here (ADR-048), in the business's
+ * voice, naming what it does take and where to read it: `403 not_allowed`, `details.reason` `<kind>_not_offered`,
+ * with the item types it takes.
  */
 export function notOffered(
   kind: "booking" | "quote_request" | "order" | "stay",
   offered: readonly ItemType[],
+  caller?: Pick<Caller, "actor">,
 ): WriteError {
-  const takes = offered.filter((t) => t !== kind && t !== "refund").map((t) => KIND_WORDS[t]);
-  const list = takes.length > 1 ? `${takes.slice(0, -1).join(", ")} and ${takes[takes.length - 1]}` : (takes[0] ?? "");
+  const list = takenHere(offered, kind);
   const yet = kind === "booking" || kind === "stay" ? " yet" : "";
   return new WriteError(
     "not_allowed",
-    `We take no ${KIND_WORDS[kind]} here${yet}.${list ? ` What we take here: ${list} (item_types in get_business_profile).` : ""} Nothing was written.`,
+    `We take no ${KIND_WORDS[kind]} here${yet}.${list ? ` What we take here: ${list} (${profileWhere(caller)}).` : ""} Nothing was written.`,
     { details: { reason: `${kind}_not_offered`, item_type: kind, item_types: [...offered] } },
+  );
+}
+
+/**
+ * An assistant's request through a door the owner switched off (`settings.doors`), in the business's voice:
+ * `403 not_allowed`, `details.reason` `door_shut`, naming what it does take.
+ */
+export function doorShut(
+  kind: "booking" | "quote_request" | "message" | "stay",
+  offered: readonly ItemType[],
+  caller?: Pick<Caller, "actor">,
+): WriteError {
+  const list = takenHere(offered, kind);
+  return new WriteError(
+    "not_allowed",
+    `We take no ${KIND_WORDS[kind]} from assistants here.${list ? ` What we take here: ${list} (${profileWhere(caller)}).` : ""} Nothing was written.`,
+    { details: { reason: "door_shut", item_type: kind, item_types: [...offered] } },
   );
 }
 

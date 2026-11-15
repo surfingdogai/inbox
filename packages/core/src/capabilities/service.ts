@@ -189,7 +189,15 @@ import {
 } from "./availability";
 import { CustomerDoors, type CustomerItemView } from "./customer";
 import { CustomerData } from "./customers";
-import { askDoor, doorSwitch, notOffered, offeredItemTypes, publishedItemTypes } from "./directory";
+import {
+  askDoor,
+  doorShut,
+  doorSwitch,
+  notOffered,
+  offeredItemTypes,
+  publishedItemTypes,
+  takenHere,
+} from "./directory";
 import { checkDiscovery, type DiscoveryView, discoveryTarget, discoveryView } from "./discovery";
 import { EmailChannelCapabilities } from "./email";
 import { FeedCapabilities } from "./feeds";
@@ -889,7 +897,9 @@ export class Capabilities {
    */
   private async refuseShut(caller: Caller, kind: "booking" | "quote_request" | "message"): Promise<void> {
     if (caller.actor.kind !== "customer_agent") return;
-    if (doorSwitch((await readSettings(this.db)).doors, kind) === false) throw doorShut(kind);
+    if (doorSwitch((await readSettings(this.db)).doors, kind) === false) {
+      throw doorShut(kind, await publishedItemTypes(this.db, nowOf(caller)), caller);
+    }
   }
 
   /**
@@ -913,7 +923,7 @@ export class Capabilities {
   ): Promise<readonly ItemType[]> {
     if (!clientRequired(caller)) return [];
     const offered = await publishedItemTypes(this.db, nowOf(caller));
-    if (!offered.includes(kind)) throw notOffered(kind, offered);
+    if (!offered.includes(kind)) throw notOffered(kind, offered, caller);
     return offered;
   }
 
@@ -941,9 +951,9 @@ export class Capabilities {
     }
     if (caller.actor.kind !== "customer_agent") return;
     const s = await readSettings(this.db);
-    if (doorSwitch(s.doors, "booking") === false) throw doorShut("booking");
     const offered = await publishedItemTypes(this.db, nowOf(caller));
-    if (!offered.includes("booking")) throw notOffered("booking", offered);
+    if (doorSwitch(s.doors, "booking") === false) throw doorShut("booking", offered, caller);
+    if (!offered.includes("booking")) throw notOffered("booking", offered, caller);
   }
 
   /** The business's time zone: its profile's, else its settings'. */
@@ -3296,37 +3306,22 @@ async function customerThread(db: Db, itemId: string): Promise<CustomerThreadEnt
   }));
 }
 
-/** An agent's request through a door the owner switched off (`settings.doors`). */
-function doorShut(kind: "booking" | "quote_request" | "message"): WriteError {
-  const what = kind === "booking" ? "bookings" : kind === "quote_request" ? "requests for a price" : "messages";
-  return new WriteError(
-    "not_allowed",
-    `This business takes no ${what} from agents here: its owner switched them off. Nothing was written. Its manifest lists what it does take.`,
-    { details: { reason: "door_shut", item_type: kind } },
-  );
-}
-
 /**
  * The refusal for a kind of request the business takes somewhere else: where to go instead, and what
  * still comes here, from the kinds this inbox lists (`here`): never a door it would refuse too.
  */
-function takenElsewhere(kind: "booking" | "order", door: DoorElsewhere, here: readonly string[]): WriteError {
+function takenElsewhere(kind: "booking" | "order", door: DoorElsewhere, here: readonly ItemType[]): WriteError {
   const what = kind === "booking" ? "bookings" : "orders";
   const place = doorPlace(door);
   const at = place === new URL(door.url).host ? door.url : `${place} (${door.url})`;
-  const messages = here.includes("message");
-  const quotes = here.includes("quote_request");
-  const still =
-    messages && quotes
-      ? " Messages and quote requests still come here."
-      : messages
-        ? " Messages still come here."
-        : quotes
-          ? " Quote requests still come here."
-          : "";
+  // What still comes here, in the business's words, as the manifest lists it.
+  const still = takenHere(
+    here.filter((t) => t === "message" || t === "quote_request"),
+    kind,
+  );
   return new WriteError(
     "not_allowed",
-    `This business takes ${what} at ${at}, not here: send the customer there. Nothing was written.${still}`,
+    `We take ${what} at ${at}, not here: send your person there. Nothing was written.${still ? ` We take ${still} here.` : ""}`,
     {
       details: {
         reason: "taken_elsewhere",

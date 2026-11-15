@@ -172,17 +172,18 @@ export class StayCapabilities {
     if (!isCustomer(caller)) return;
     const there = await this.elsewhere(settings, q);
     if (there) {
-      throw new WriteError("not_allowed", `This property takes stays on its own booking page: ${there}`, {
-        details: { reason: "elsewhere", url: there },
-      });
+      // In the business's voice, as every door's refusal (ADR-048).
+      throw new WriteError(
+        "not_allowed",
+        `We take stays on our own booking page, not here: ${there}. Send your person there. Nothing was written.`,
+        { details: { reason: "elsewhere", url: there } },
+      );
     }
     if (caller.actor.kind === "customer_agent" && settings.doors.stay === false) {
       throw new WriteError(
         "not_allowed",
-        "This property does not take stays through assistants. Send a message instead.",
-        {
-          details: { reason: "door_shut", type: "stay" },
-        },
+        "We take no stays from assistants here: send us a message instead. Nothing was written.",
+        { details: { reason: "door_shut", type: "stay" } },
       );
     }
   }
@@ -194,7 +195,7 @@ export class StayCapabilities {
   private async refuseStayNotOffered(caller: Caller): Promise<void> {
     if (!clientRequired(caller)) return;
     const offered = await publishedItemTypes(this.db, nowOf(caller));
-    if (!offered.includes("stay")) throw notOffered("stay", offered);
+    if (!offered.includes("stay")) throw notOffered("stay", offered, caller);
   }
 
   /**

@@ -194,7 +194,7 @@ export class IdentityCapabilities {
     const kind = input.type;
     if (kind !== "booking" && kind !== "quote_request" && kind !== "order" && kind !== "stay") return;
     const offered = await publishedItemTypes(this.db, now);
-    if (!offered.includes(kind)) throw notOffered(kind, offered);
+    if (!offered.includes(kind)) throw notOffered(kind, offered, caller);
     if (kind === "quote_request") await checkQuoteRequest(this.db, input.payload);
     if (kind !== "order" && kind !== "booking") return;
     const counters = (await readSettings(this.db)).negotiation.priceCounters;
