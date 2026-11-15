@@ -136,7 +136,8 @@ describe("the public MCP's tools", () => {
       "Reply on an item you made (item_id). This business takes no new conversations here.",
     );
     // Its item_id says the same, never "omit to start a new conversation".
-    const itemId = (message?.inputSchema as { properties: { item_id: { description?: string } } }).properties.item_id;
+    const itemId = (message?.inputSchema as unknown as { properties: { item_id: { description?: string } } }).properties
+      .item_id;
     expect(itemId.description).toBe("The item you made, to reply on: this business takes no new conversations here.");
   });
 
