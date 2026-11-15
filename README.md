@@ -11,7 +11,8 @@ Add our demo bike shop to Claude or ChatGPT as a custom connector (an MCP server
 https://demo.surfingdog.ai/mcp
 ```
 
-Then ask it: *"Book a bike service with Oficina Maré on Saturday morning."* Watch the booking arrive,
+Then ask it: *"Book a bike service with Oficina Maré on Saturday morning."* It asks for a name and an email
+address or a phone number, as a real business would: any will do. Watch the booking arrive,
 and the shop confirm it, at https://demo.surfingdog.ai/demo/live. The demo never emails anyone who uses
 it, shows no names and is wiped every night.
 

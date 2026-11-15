@@ -25,7 +25,7 @@ Every tool states `readOnlyHint`, `destructiveHint`, `idempotentHint` and `openW
 
 `ask_business`, `request_quote` and `request_booking` are for when your person asks you to contact a business. They go only to a business in the directory that has its own inbox, and only when its inbox says it takes them (an inbox from before the owner's switch says nothing, and is carried nothing). The business can answer your person by email.
 
-- **Contact.** An email address your person agreed to give the business (`consent: true`), and a name if they want one. Never a phone number.
+- **Contact.** Your person's name and an email address they agreed to give the business (`consent: true`). Never a phone number. Ask them first; a request without a name is refused by the business's inbox.
 - **The answer** is the inbox's own: the request as it keeps it, its words, and an access token to read the request's state at the inbox, given once.
 - **A priced booking** first answers with the business's terms (`outcome: "confirm"`). Show them to your person; send `terms_sha` only after their yes.
 - **What we keep:** when, to which business, the kind of request, and how it went. Not who sent it, and not what it said. Nothing about your person goes back to your assistant's platform, and there is no list of anyone's requests.

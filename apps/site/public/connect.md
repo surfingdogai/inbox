@@ -514,7 +514,7 @@ off what the inbox offers. For a tool the inbox does not connect to (Fresha, say
 Coming: recording bookings made elsewhere.
 
 **Test.** Find a free time with `GET https://<inbox>/v1/availability?service_id=…&from=…&to=…`.
-Create a sandbox booking there with `POST /v1/bookings`, the `x-sandbox: 1` header and no contact.
+Create a sandbox booking there with `POST /v1/bookings`, the `x-sandbox: 1` header and a made-up client: `"contact": {"name": "Test", "email": "test@example.com"}`.
 The owner still gets the usual email. Confirm it with
 `transition_item`: the event should appear in the calendar. Fire `cancel_by_business`: it should go.
 
