@@ -50,7 +50,7 @@ async function setup(opts: { stripeKey?: string; testMode?: boolean } = {}) {
     "/v1/owner/settings",
     {
       doc: {
-        business: { name: "Fjordbrød Bakery" },
+        business: { name: "Fjordbrød Bakery", currency: "NOK" },
         email: { fromAddress: "orders@fjordbrod.example" },
         notifications: { ownerEmail: "ingrid@fjordbrod.example", appUrl: BASE },
         ...(opts.testMode ? { testMode: true } : {}),

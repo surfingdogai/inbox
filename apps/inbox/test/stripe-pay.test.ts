@@ -77,6 +77,9 @@ type S = Awaited<ReturnType<typeof setup>>;
  */
 async function order(s: S, opts: { currency?: string; accept?: boolean } = {}) {
   const currency = opts.currency ?? "GBP";
+  // The business prices in the order's currency: an assistant orders only in the business's own (ADR-048).
+  const priced = await s.call("PUT", "/v1/owner/settings", { doc: { business: { currency } } }, s.owner);
+  expect(priced.status, await priced.clone().text()).toBe(200);
   const beans = await aProduct(s.db, { name: "Coffee beans, 1 kg", value: 1450, currency });
   const made = await confirmed(
     (r) => s.inbox.app.request(r),

@@ -659,7 +659,7 @@ describe("an order in a currency with no minor unit, or one counted in thousandt
       s.owner,
     );
     expect(made.status, await made.clone().text()).toBe(201);
-    // What the business sells, in the currency it prices it in (ADR-048).
+    // What the business sells, in the currency it prices it in, its own (ADR-048).
     const product = await aProduct(s.db, { name: item, value, currency });
     const order = await confirmed(
       (r) => s.inbox.app.request(r),
@@ -689,7 +689,7 @@ describe("an order in a currency with no minor unit, or one counted in thousandt
       2_800,
       {
         name: "Zakka Osaka",
-        currency: "USD",
+        currency: "JPY",
         timezone: "Asia/Tokyo",
         languages: ["ja", "en"],
       },
@@ -707,7 +707,7 @@ describe("an order in a currency with no minor unit, or one counted in thousandt
       1_250,
       {
         name: "Souq Mubarakiya Spices",
-        currency: "USD",
+        currency: "KWD",
         timezone: "Asia/Kuwait",
         languages: ["ar", "en"],
       },
