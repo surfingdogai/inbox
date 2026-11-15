@@ -367,6 +367,8 @@ export class StayCapabilities {
 
   /** A request for a stay: the property answers it with its own quote (`request_stay`). */
   async request(caller: Caller, raw: unknown): Promise<CreateResult & { readonly words: string }> {
+    // A key of the business's makes a stay only while it may write items (ADR-048), as on every other door.
+    await this.deps.access.requireScope(caller, ["inbox:write"], "public:request_stay");
     const input = parse(I.requestStayInput, raw);
     const settings = await readSettings(this.db);
     const setup = await this.setupFor(input.property_id);
@@ -450,6 +452,7 @@ export class StayCapabilities {
       readonly words: string;
     }
   > {
+    await this.deps.access.requireScope(caller, ["inbox:write"], "public:hold_stay");
     const input = parse(I.holdStayInput, raw);
     const settings = await readSettings(this.db);
     const setup = await this.setupFor(input.property_id);

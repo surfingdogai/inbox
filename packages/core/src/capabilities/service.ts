@@ -893,6 +893,16 @@ export class Capabilities {
   }
 
   /**
+   * A key or an AI app of the business's on a door that makes something new (ADR-048): it writes a request
+   * down as the business only while it may write items (`inbox:write`), as on every follow-up door. A narrower
+   * key, a website's forms key or a read-only one, is refused outside its scopes before anything is read or
+   * kept; the forms key always, whatever the owner set. A customer, and the inbox itself, are not asked.
+   */
+  private async requireWriter(caller: Caller, operation: string): Promise<void> {
+    await this.access.requireScope(caller, ["inbox:write"], `public:${operation}`);
+  }
+
+  /**
    * An assistant's request of a kind this business does not take here (ADR-048): the kinds its manifest and
    * profile publish (`publishedItemTypes`) are the only ones an assistant may send, and the refusal names
    * them. People writing by email or on the business's own page, and the business itself, are not asked.
@@ -1305,6 +1315,7 @@ export class Capabilities {
   }
 
   async requestQuote(caller: Caller, input: T.RequestQuoteInput, opts: DoorFacts = {}): Promise<CreateResult> {
+    await this.requireWriter(caller, "request_quote");
     await this.refuseShut(caller, "quote_request");
     const c = withIdempotencyKey(caller, input.idempotency_key);
     // A kind the business takes, from a person the business can answer (ADR-048): asked before any file is
@@ -1336,6 +1347,7 @@ export class Capabilities {
    * §2.1). The answer's `identity` says who the inbox takes the customer for.
    */
   async createBooking(caller: Caller, request: T.CreateBookingRequest, opts: DoorFacts = {}): Promise<CreateResult> {
+    await this.requireWriter(caller, "create_booking");
     await this.refuseElsewhere(caller, "booking");
     await this.refuseShut(caller, "booking");
     await this.refuseUnbookable(caller, request.payload?.reservationFor?.serviceId, { booking: true });
@@ -1462,6 +1474,7 @@ export class Capabilities {
   }
 
   async createOrder(caller: Caller, input: T.CreateOrderInput, opts: DoorFacts = {}): Promise<CreateResult> {
+    await this.requireWriter(caller, "create_order");
     await this.refuseElsewhere(caller, "order");
     const c = withIdempotencyKey(caller, input.idempotency_key);
     // An order for a time is checked by the kitchen before anything is asked or promised (ADR-040): the
@@ -1741,6 +1754,7 @@ export class Capabilities {
   ): Promise<CreateResult | TransitionResult | ItemView> {
     const c = withToken(withIdempotencyKey(caller, input.idempotency_key), input.access_token);
     if (!input.item_id) {
+      await this.requireWriter(caller, "send_message");
       await this.refuseShut(caller, "message");
       // From a person the business can answer (ADR-048); a retry of one already written is answered as it was.
       if (!(c.idempotency && (await findIdempotent(this.db, c.idempotency))))

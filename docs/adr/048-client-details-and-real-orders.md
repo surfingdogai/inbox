@@ -30,7 +30,10 @@ The founder's, 15 November 2026:
   or none, carried by a network or not: `Surfing-Dog-Carried` grants nothing. A person by email, on a form on the
   business's website or on its own page is never refused for this: their address, or the business's own form, is
   how it answers them, and an email whose display name is an address keeps no name. The business writes down what
-  it knows (the owner, staff, its AI, its keys, a connector, a rule, the system). A follow-up belongs to an item
+  it knows (the owner, staff, its AI, its keys, a connector, a rule, the system), on these doors only with a key or
+  an AI app that may write items (`inbox:write`): a narrower one, a website's forms key or a read-only key, is
+  refused outside its scopes (`403 not_allowed`, `details.reason` `outside_scopes`), the forms key whatever the
+  owner set, as on every follow-up door. A follow-up belongs to an item
   that has its client (a reply, details asked for, an answer to an offer, a cancellation, a withdrawal, a return,
   the order or booking an accepted quote makes). A retry of a request already written is answered as it was.
 - **What counts.** A name: trimmed, 1 to 200 characters, a letter, no email address. An email address the networks'

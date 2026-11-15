@@ -225,6 +225,68 @@ describe("REST", () => {
     expect(JSON.parse(String(rows[0]?.[0]))).toMatchObject({ carried: true });
   });
 
+  it("refuses a key that may not write items, a website's forms key or a read-only one, on every door that makes something new", async () => {
+    const s = await workshop();
+    const readOnly = {
+      authorization: `Bearer ${(await createApiKey(s.db, { kind: "integration", name: "Dashboard", scopes: ["inbox:read", "events:read", "settings:read"] })).key}`,
+    };
+    // As it arrived, and with a client: neither key writes anything as the business.
+    const incident = {
+      "/v1/orders": {
+        payload: {
+          orderedItem: [{ name: "audit-fixturex", quantity: 1, price: { value: 1, currency: "AUD" } }],
+          totalPrice: { value: 1, currency: "AUD" },
+        },
+      },
+      "/v1/quotes": { payload: { itemOffered: { name: "audit-fixturex" }, description: "audit-fixturex" } },
+      "/v1/messages": { body: "audit-fixturex" },
+    };
+    for (const key of [s.forms, readOnly]) {
+      for (const [path, body] of [...Object.entries(incident), ...Object.entries(s.bodies)]) {
+        const res = await s.call("POST", path, { ...body, contact: RITA }, key);
+        expect(res.status, `${path} ${await res.clone().text()}`).toBe(403);
+        expect(((await res.json()) as Problem).details, path).toMatchObject({
+          reason: "outside_scopes",
+          required_scopes: ["inbox:write"],
+        });
+      }
+    }
+    // Through the public MCP too.
+    const client = new Client({ name: "dashboard", version: "0" });
+    await client.connect(
+      new StreamableHTTPClientTransport(new URL(`${BASE}/mcp`), {
+        fetch: async (input: string | URL, init?: RequestInit) =>
+          s.inbox.app.request(String(input), {
+            ...init,
+            headers: { ...Object.fromEntries(new Headers(init?.headers).entries()), ...readOnly },
+          }),
+      }),
+    );
+    const r = (await client.callTool({
+      name: "create_order",
+      arguments: { ...s.tools.create_order, contact: RITA },
+    })) as {
+      isError?: boolean;
+      content: { text: string }[];
+    };
+    expect(r.isError).toBe(true);
+    expect(r.content[0]?.text).toContain("inbox:write");
+    await client.close();
+    expect(await s.count("items")).toBe(0);
+    expect(await s.count("blobs")).toBe(0);
+    // A key that may write items still writes them down as the business.
+    const automation = {
+      authorization: `Bearer ${(await createApiKey(s.db, { kind: "integration", name: "Zapier", scopes: ["inbox:read", "inbox:write", "events:read"] })).key}`,
+    };
+    const made = await s.call(
+      "POST",
+      "/v1/messages",
+      { body: "Called about wheels", idempotency_key: ulid() },
+      automation,
+    );
+    expect(made.status, await made.clone().text()).toBe(201);
+  });
+
   it("lets the business's own keys write a booking down with no client", async () => {
     const s = await workshop();
     for (const key of [s.owner, s.integration]) {
