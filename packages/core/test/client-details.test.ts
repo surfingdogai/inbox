@@ -343,6 +343,14 @@ describe("what counts as a client's details", () => {
       "Rita & Rui",
       "Ai",
       "Tester-Silva",
+      // Short names that are also programmers' words: people are called them.
+      "Nan",
+      "Nil",
+      "Na",
+      "Anon",
+      "Bar",
+      "Foo",
+      "Baz",
     ]) {
       expect(fillerName(name), name).toBe(false);
     }

@@ -50,15 +50,13 @@ export function clientPhone(raw: unknown): string | null {
 
 /**
  * What an assistant writes for a name when it has none, compared in lower case, letters and digits alone: a word
- * for nobody, a form's own label, a test's filler. A person's own name is never one of these.
+ * for nobody, a form's own label, a test's filler. A person's own name is never one of these: short words that are
+ * also people's names somewhere (Na, Nan, Nil, Anon, Bar, Foo, Baz) are left out, "N/A" is caught as "n a".
  */
 const NO_NAMES: ReadonlySet<string> = new Set([
-  "na",
   "n a",
   "none",
   "null",
-  "nil",
-  "nan",
   "undefined",
   "unknown",
   "unspecified",
@@ -71,7 +69,6 @@ const NO_NAMES: ReadonlySet<string> = new Set([
   "noname",
   "nobody",
   "anonymous",
-  "anon",
   "tbd",
   "tbc",
   "redacted",
@@ -128,9 +125,6 @@ const NO_NAMES: ReadonlySet<string> = new Set([
   "dummy",
   "fake",
   "fake name",
-  "foo",
-  "bar",
-  "baz",
   "foo bar",
   "foobar",
   "john doe",
