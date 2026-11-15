@@ -1232,8 +1232,12 @@ describe("what an order is checked for, before it is taken", () => {
     );
     // Refused with the order's other lines' checks, before the kitchen is asked.
     expect(e.details?.reason).toBe("not_on_sale");
-    expect(e.message).toBe("A line is for a product we no longer sell, so it cannot be ordered. Nothing was written.");
-    expect(e.fields).toEqual([{ path: "payload.orderedItem.0", problem: "invalid", message: "not on sale" }]);
+    expect(e.message).toBe(
+      "We no longer sell Pizza al pastor: leave that line out, or ask your person to choose another product from list_products. Nothing was written.",
+    );
+    expect(e.fields).toEqual([
+      { path: "payload.orderedItem.0", problem: "invalid", message: "not on sale: leave this line out" },
+    ]);
   });
 
   it("the zone's minimum counts what the options add", async () => {

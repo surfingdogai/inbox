@@ -193,7 +193,7 @@ export class StayCapabilities {
    */
   private async refuseStayNotOffered(caller: Caller): Promise<void> {
     if (!clientRequired(caller)) return;
-    const offered = await publishedItemTypes(this.db);
+    const offered = await publishedItemTypes(this.db, nowOf(caller));
     if (!offered.includes("stay")) throw notOffered("stay", offered);
   }
 

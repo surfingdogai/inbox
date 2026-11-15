@@ -64,9 +64,16 @@ The founder's, 15 November 2026:
 - **Schemas.** `contact` and its `name` are listed as required in the JSON Schema (the MCP tool list,
   `/openapi.json`), with each detail's format and length, and read as sent: nothing about the contact is refused by
   a schema, so every door answers in the client rule's words; no `anyOf`, which some clients cannot take. The MCP
-  tools' text names each detail's need in full, so a phone is asked for as readily as an email. An order's line names and prices and its total may be left to the catalogue: a customer's order is first
-  read with them optional, and what is stored is read again strictly. `order` is offered only with an active
-  product priced `fixed`; the setup plan predicts the same.
+  tools' text names each detail's need in full, so a phone is asked for as readily as an email. An order's line
+  names and prices and its total may be left to the catalogue: a customer's order is first read with them
+  optional, and what is stored is read again strictly.
+- **Orders.** The business's currency is its own, as its profile publishes it (`currency`), never the catalogue's
+  first line's. A line names a product on sale, not past its last moment to order (`available_until`), priced
+  `fixed` in that currency; one priced from, as a range, on request or in another currency is `not_priced`, said
+  as `list_products` shows it, and asked about with `request_quote` (or `send_message` while the business takes
+  no request for a price). A product off sale is named, with what to do: leave the line out, or choose another.
+  `order` is offered only with a product an order may name, as of the request; the setup plan predicts the same,
+  and so does the hosted door probe.
 - **Tools.** The public MCP lists a create tool only for a kind in `item_types`: `create_order` and
   `quote_shipping` for orders, `check_availability` and `create_booking` for bookings, `request_quote`,
   `request_stay` and `hold_stay` for stays. A place to stay keeps the tools that read (`get_property`,

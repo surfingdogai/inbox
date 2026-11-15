@@ -139,14 +139,32 @@ describe("an assistant's order line", () => {
       .where(eq(products.id, s.chain));
     // Something else is on sale, so orders are still taken.
     await aProduct(s.caps, { name: "Bell", value: 900 });
-    for (const productId of [s.saddle, s.chain]) {
+    for (const [productId, name] of [
+      [s.saddle, "Saddle"],
+      [s.chain, "Chain"],
+    ] as const) {
       const e = await refused(order(s, { orderedItem: [{ productId, quantity: 1 }] }));
       expect(e.details).toEqual({ reason: "not_on_sale" });
+      // Named, with what to do next: leave it out, or choose another.
       expect(e.message).toBe(
-        "A line is for a product we no longer sell, so it cannot be ordered. Nothing was written.",
+        `We no longer sell ${name}: leave that line out, or ask your person to choose another product from list_products. Nothing was written.`,
       );
-      expect(e.fields).toEqual([{ path: "payload.orderedItem.0", problem: "invalid", message: "not on sale" }]);
+      expect(e.fields).toEqual([
+        { path: "payload.orderedItem.0", problem: "invalid", message: "not on sale: leave this line out" },
+      ]);
     }
+    const both = await refused(
+      order(s, {
+        orderedItem: [
+          { productId: s.saddle, quantity: 1 },
+          { productId: s.chain, quantity: 2 },
+        ],
+      }),
+    );
+    expect(both.message).toBe(
+      "We no longer sell Saddle and Chain: leave those lines out, or ask your person to choose another product from list_products. Nothing was written.",
+    );
+    expect(both.fields?.map((f) => f.path)).toEqual(["payload.orderedItem.0", "payload.orderedItem.1"]);
   });
 
   it("is for a product at a fixed price: one priced from, as a range or on request is asked about instead", async () => {
@@ -168,7 +186,7 @@ describe("an assistant's order line", () => {
     const one = await refused(order(s, { orderedItem: [{ productId: cake.id, quantity: 1 }] }));
     expect(one.details).toEqual({ reason: "not_priced" });
     expect(one.message).toBe(
-      "We price Wedding cake on request, so it is not ordered here: ask for a price with request_quote (itemOffered.productId). Nothing was written.",
+      "Wedding cake is priced on request, so it is not ordered here: ask for a price with request_quote (itemOffered.productId). Nothing was written.",
     );
     const three = await refused(
       order(s, {
@@ -180,18 +198,47 @@ describe("an assistant's order line", () => {
         ],
       }),
     );
+    // Each said as list_products shows it: from, a range, on request.
     expect(three.message).toBe(
-      "We price Custom frame, Wheel build and Wedding cake on request, so they are not ordered here: ask for a price with request_quote (itemOffered.productId). Nothing was written.",
+      "Custom frame is priced from €90.00, Wheel build is priced from €200.00 to €400.00 and Wedding cake is priced on request, so they are not ordered here: ask for a price with request_quote (itemOffered.productId). Nothing was written.",
     );
     expect(three.fields?.map((f) => f.path)).toEqual([
       "payload.orderedItem.1.productId",
       "payload.orderedItem.2.productId",
       "payload.orderedItem.3.productId",
     ]);
-    expect(three.fields?.[0]).toMatchObject({
-      problem: "invalid",
-      message: "priced on request: ask with request_quote",
-    });
+    expect(three.fields?.map((f) => f.message)).toEqual([
+      "priced from €90.00: ask with request_quote",
+      "priced from €200.00 to €400.00: ask with request_quote",
+      "priced on request: ask with request_quote",
+    ]);
+    // Where the business takes no request for a price, it is asked about in a message.
+    await s.caps.updateSettings(owner, { doc: { doors: { quoteRequest: false } } });
+    const asked = await refused(order(s, { orderedItem: [{ productId: cake.id, quantity: 1 }] }));
+    expect(asked.message).toBe(
+      "Wedding cake is priced on request, so it is not ordered here: ask us about it with send_message. Nothing was written.",
+    );
+    expect(asked.fields?.[0]?.message).toBe("priced on request: not ordered here");
+  });
+
+  it("is for a product priced in our own currency: one priced in another is not ordered here", async () => {
+    const s = await setup();
+    // The catalogue takes a product in another currency; the business's prices, and its orders, are in EUR.
+    const mug = await aProduct(s.caps, { name: "Mug", value: 1_000, currency: "USD" });
+    const e = await refused(order(s, { orderedItem: [{ productId: mug, quantity: 1 }] }));
+    expect(e.details).toEqual({ reason: "not_priced" });
+    expect(e.message).toBe(
+      "Mug is priced in USD, not in EUR, our currency, so it is not ordered here: ask for a price with request_quote (itemOffered.productId). Nothing was written.",
+    );
+    // Our currency is the business's, never the catalogue's first line's: a price in it is ours, and goes on to
+    // the summary the person confirms.
+    const ok = await refused(order(s, { orderedItem: [{ productId: s.chain, quantity: 1, price: EUR(1_850) }] }));
+    expect(ok.code).toBe("confirm_terms");
+    const usd = await refused(
+      order(s, { orderedItem: [{ productId: s.chain, quantity: 1, price: { value: 1_850, currency: "USD" } }] }),
+    );
+    expect(usd.details).toEqual({ reason: "currency_not_ours", currency: "EUR" });
+    expect(await s.count()).toBe(0);
   });
 });
 

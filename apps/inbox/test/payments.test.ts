@@ -764,6 +764,9 @@ describe("when Stripe does not make the link", () => {
 
 /** An order of the customer's through the public door, in any currency, not yet accepted: for a product it sells. */
 async function orderIn(s: S, value: number, currency = "EUR") {
+  // A business that prices in this currency: an assistant orders only in the business's own (ADR-048).
+  const priced = await s.call("PUT", "/v1/owner/settings", { doc: { business: { currency } } }, s.owner);
+  expect(priced.status, await priced.clone().text()).toBe(200);
   const product = await aProduct(s.db, { name: "Colour and cut", value, currency });
   const made = await confirmed(
     (r) => s.inbox.app.request(r),

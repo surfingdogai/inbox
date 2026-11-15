@@ -1,10 +1,12 @@
 import { runMigrations } from "@surfingdog/platform";
+import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import type { SetupPlanInput } from "../src/capabilities/plan";
 import { Capabilities } from "../src/capabilities/service";
 import { createDb, type Db } from "../src/db";
 import { PRESETS } from "../src/rules/presets";
 import { MIGRATIONS } from "../src/schema/migrations.generated";
+import { products } from "../src/schema/tables";
 import { readSettings } from "../src/settings/schema";
 import type { Caller } from "../src/write/index";
 import { makeClient, resetTables } from "./harness";
@@ -335,6 +337,24 @@ describe("a setup plan", () => {
     // As the inbox has it, applied: the plan and the inbox give the same answer.
     expect((await caps.applySetupPlan(system, plan)).doors).toEqual(dry.doors);
     expect((await caps.getBusinessProfile()).item_types).toEqual(["message", "quote_request"]);
+  });
+
+  it("expects no orders while the only product at a fixed price is past its last day to order", async () => {
+    const { db, caps } = await setup();
+    const loaf = await caps.setup.createProduct(owner, {
+      name: "Loaf",
+      price: { value: 450, currency: "EUR" },
+      active: true,
+    });
+    await db.orm
+      .update(products)
+      .set({ availableUntil: T0 - 86_400_000 })
+      .where(eq(products.id, loaf.id));
+    const plan: SetupPlanInput = { profile: { name: "Bolo Bom" }, doors: ["message", "order"] };
+    const dry = await caps.applySetupPlan(owner, plan, { dryRun: true });
+    expect(dry.doors.on).not.toContain("order");
+    expect(dry.doors.missing.map((m) => m.door)).toEqual(["order"]);
+    expect((await caps.getBusinessProfile()).item_types).not.toContain("order");
   });
 
   it("sets up a place to stay: its rules, nothing confirming on its own, and the stay door once it has a room", async () => {

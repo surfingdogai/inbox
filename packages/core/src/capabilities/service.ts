@@ -189,7 +189,7 @@ import {
 } from "./availability";
 import { CustomerDoors, type CustomerItemView } from "./customer";
 import { CustomerData } from "./customers";
-import { doorSwitch, notOffered, offeredItemTypes, publishedItemTypes } from "./directory";
+import { askDoor, doorSwitch, notOffered, offeredItemTypes, publishedItemTypes } from "./directory";
 import { checkDiscovery, type DiscoveryView, discoveryTarget, discoveryView } from "./discovery";
 import { EmailChannelCapabilities } from "./email";
 import { FeedCapabilities } from "./feeds";
@@ -907,10 +907,14 @@ export class Capabilities {
    * profile publish (`publishedItemTypes`) are the only ones an assistant may send, and the refusal names
    * them. People writing by email or on the business's own page, and the business itself, are not asked.
    */
-  private async refuseNotOffered(caller: Caller, kind: "booking" | "quote_request" | "order"): Promise<void> {
-    if (!clientRequired(caller)) return;
-    const offered = await publishedItemTypes(this.db);
+  private async refuseNotOffered(
+    caller: Caller,
+    kind: "booking" | "quote_request" | "order",
+  ): Promise<readonly ItemType[]> {
+    if (!clientRequired(caller)) return [];
+    const offered = await publishedItemTypes(this.db, nowOf(caller));
     if (!offered.includes(kind)) throw notOffered(kind, offered);
+    return offered;
   }
 
   /**
@@ -938,7 +942,7 @@ export class Capabilities {
     if (caller.actor.kind !== "customer_agent") return;
     const s = await readSettings(this.db);
     if (doorSwitch(s.doors, "booking") === false) throw doorShut("booking");
-    const offered = await publishedItemTypes(this.db);
+    const offered = await publishedItemTypes(this.db, nowOf(caller));
     if (!offered.includes("booking")) throw notOffered("booking", offered);
   }
 
@@ -1494,13 +1498,14 @@ export class Capabilities {
     // An assistant's order (ADR-048): a kind the business takes, from a person it can answer, for products
     // it sells at its prices in its currency. All of it before the kitchen, a summary or a file.
     if (!replay) {
-      await this.refuseNotOffered(c, "order");
+      const offered = await this.refuseNotOffered(c, "order");
       requireClient(c, input.contact, "order");
       if (clientRequired(c)) {
         await checkOrderLines(this.db, input.payload, {
           pricing,
           now: nowOf(c),
           counters: (await readSettings(this.db)).negotiation.priceCounters,
+          ask: askDoor(offered),
         });
       }
     }

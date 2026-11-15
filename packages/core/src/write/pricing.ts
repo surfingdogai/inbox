@@ -487,27 +487,48 @@ function listed(names: readonly string[]): string {
   return names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : (names[0] ?? "");
 }
 
+/** How a product is priced, said of it, when it is not ordered here: "priced from €90.00", "priced on request". */
+function pricedWords(product: CatalogueProduct, ours: string): string {
+  const currency = product.price.currency.toUpperCase();
+  if (product.priceModel === "quote") return "priced on request";
+  if (currency !== ours) return `priced in ${currency}, not in ${ours}, our currency`;
+  if (product.priceModel === "range" && product.priceMax) {
+    return `priced from ${moneyText(product.price)} to ${moneyText(product.priceMax)}`;
+  }
+  if (product.priceModel === "from" || product.priceModel === "range") return `priced from ${moneyText(product.price)}`;
+  return "priced on request";
+}
+
 /**
  * An assistant's order as the business takes it (ADR-048): each line names a product it sells (`productId`, else
- * `sku`), on sale, priced `fixed`, and a price or a total the request carries is the business's, in its currency.
- * While the business takes a customer's own price (`negotiation.priceCounters`, ADR-018 Q1) a different price in its
- * currency is their offer and is kept as before. Throws the first refusal that applies, naming every line it holds for.
+ * `sku`), on sale, priced `fixed` in the business's own currency, and a price or a total the request carries is the
+ * business's, in that currency. While the business takes a customer's own price (`negotiation.priceCounters`,
+ * ADR-018 Q1) a different price in its currency is their offer and is kept as before. Throws the first refusal that
+ * applies, naming every line it holds for, and what to do next: `ask`, the door to ask the business about a product
+ * it does not sell here, when it takes one (`request_quote`, else `send_message`).
  */
 export async function checkOrderLines(
   db: Db,
   payload: unknown,
-  o: { readonly pricing?: PricingFor | undefined; readonly now: number; readonly counters: boolean },
+  o: {
+    readonly pricing?: PricingFor | undefined;
+    readonly now: number;
+    readonly counters: boolean;
+    readonly ask?: "request_quote" | "send_message" | null | undefined;
+  },
 ): Promise<void> {
   const parsed = orderRequestPayloadSchema.safeParse(payload);
   if (!parsed.success) throw fromZod(parsed.error, "payload");
   const lines = parsed.data.orderedItem;
   const catalogue = await productsFor(db, lines);
+  const ours = (await businessCurrency(db)).toUpperCase();
+  const ask = o.ask === undefined ? "request_quote" : o.ask;
   const at = (i: number) => `payload.orderedItem.${i}`;
   /** Lines naming no product, and lines naming one we do not have, in the order they came. */
   const unnamed: { i: number; problem: FieldProblem }[] = [];
   const unknown: { i: number; problem: FieldProblem }[] = [];
-  const offSale: FieldProblem[] = [];
-  const onRequest: { i: number; product: CatalogueProduct }[] = [];
+  const offSale: { i: number; product: CatalogueProduct }[] = [];
+  const notHere: { i: number; product: CatalogueProduct }[] = [];
   lines.forEach((line, i) => {
     if (line.productId === undefined && line.sku === undefined) {
       unnamed.push({
@@ -535,10 +556,11 @@ export async function checkOrderLines(
       return;
     }
     if (product.active === 0 || (product.availableUntil !== null && product.availableUntil <= o.now)) {
-      offSale.push({ path: at(i), problem: "invalid", message: "not on sale" });
+      offSale.push({ i, product });
       return;
     }
-    if (product.priceModel !== "fixed") onRequest.push({ i, product });
+    // Sold at a fixed price, in our currency: anything else is asked about, never ordered here.
+    if (product.priceModel !== "fixed" || product.price.currency.toUpperCase() !== ours) notHere.push({ i, product });
   });
   if (unknown.length) {
     throw new WriteError(
@@ -557,23 +579,44 @@ export async function checkOrderLines(
       { fields: unnamed.map((l) => l.problem), details: { reason: "product_missing" } },
     );
   }
+  const names = (rows: readonly { product: CatalogueProduct }[]) => [
+    ...new Map(rows.map(({ product }) => [product.id, product.name])).values(),
+  ];
   if (offSale.length) {
+    const gone = names(offSale);
     throw new WriteError(
       "invalid_input",
-      "A line is for a product we no longer sell, so it cannot be ordered. Nothing was written.",
-      { fields: offSale, details: { reason: "not_on_sale" } },
+      `We no longer sell ${listed(gone)}: leave ${gone.length > 1 ? "those lines" : "that line"} out, or ask your person to choose another product from list_products. Nothing was written.`,
+      {
+        fields: offSale.map(({ i }) => ({
+          path: at(i),
+          problem: "invalid" as const,
+          message: "not on sale: leave this line out",
+        })),
+        details: { reason: "not_on_sale" },
+      },
     );
   }
-  if (onRequest.length) {
-    const names = [...new Map(onRequest.map(({ product }) => [product.id, product.name])).values()];
+  if (notHere.length) {
+    const said = [
+      ...new Map(
+        notHere.map(({ product }) => [product.id, `${product.name} is ${pricedWords(product, ours)}`]),
+      ).values(),
+    ];
+    const next =
+      ask === "request_quote"
+        ? ": ask for a price with request_quote (itemOffered.productId)"
+        : ask === "send_message"
+          ? ": ask us about it with send_message"
+          : "";
     throw new WriteError(
       "invalid_input",
-      `We price ${listed(names)} on request, so ${names.length > 1 ? "they are" : "it is"} not ordered here: ask for a price with request_quote (itemOffered.productId). Nothing was written.`,
+      `${listed(said)}, so ${said.length > 1 ? "they are" : "it is"} not ordered here${next}. Nothing was written.`,
       {
-        fields: onRequest.map(({ i }) => ({
+        fields: notHere.map(({ i, product }) => ({
           path: `${at(i)}.productId`,
           problem: "invalid" as const,
-          message: "priced on request: ask with request_quote",
+          message: `${pricedWords(product, ours)}${ask === "request_quote" ? ": ask with request_quote" : ": not ordered here"}`,
         })),
         details: { reason: "not_priced" },
       },
@@ -582,7 +625,8 @@ export async function checkOrderLines(
   const priced = await priceOrder(db, parsed.data, o.pricing, o.now);
   const total = priced.payload.totalPrice as Money | undefined;
   if (!total) return;
-  const currency = total.currency;
+  // Every line is ours by now, in our currency: the order's total is too.
+  const currency = ours;
   const foreign: FieldProblem[] = [];
   lines.forEach((line, i) => {
     if (line.price && line.price.currency.toUpperCase() !== currency) {
@@ -776,6 +820,8 @@ interface CatalogueProduct {
   readonly menu: unknown;
   /** How its price is meant (catalogue version 2): only `fixed` prices an order line. */
   readonly priceModel: string;
+  /** Where a `range` price ends. */
+  readonly priceMax: Money | null;
   /** A pre-order, a back-order or made to order, which its stock does not hold back. */
   readonly availability: string | null;
   /** The last moment it can be ordered, in milliseconds. */
@@ -800,6 +846,7 @@ async function productsFor(db: Db, lines: readonly { productId?: string | undefi
     stock: products.stock,
     menu: products.menu,
     priceModel: products.priceModel,
+    priceMax: products.priceMax,
     availability: products.availability,
     availableUntil: products.availableUntil,
   };
@@ -821,7 +868,8 @@ async function productsFor(db: Db, lines: readonly { productId?: string | undefi
 }
 
 /** The currency a price without one is in: the business's, as its profile gives it. */
-async function businessCurrency(db: Db): Promise<string> {
+/** The business's own currency, as its profile publishes it: what its prices, and an order's, are in (ADR-048). */
+export async function businessCurrency(db: Db): Promise<string> {
   const [row] = await db.orm.select({ currency: business.currency }).from(business).limit(1);
   return row?.currency || (await readSettings(db)).business.currency;
 }

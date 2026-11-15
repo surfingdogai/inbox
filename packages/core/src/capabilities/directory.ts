@@ -28,6 +28,7 @@ import {
 import { lodgingProfile } from "../stays/public";
 import { listProperties, type PropertySetup, readSetup } from "../stays/store";
 import { WriteError } from "../write/errors";
+import { businessCurrency } from "../write/pricing";
 import { dateLocaliser, readClosures } from "./closures";
 
 /**
@@ -51,10 +52,17 @@ export const STAY_ROOM_OFFERED_SQL = `SELECT 1 FROM room_types r JOIN properties
   LIMIT 1`;
 
 /**
- * A product an order can name (ADR-048): on sale, at a fixed price. A row when there is one; a setup plan's
- * dry run reads the same.
+ * A product an order can name (ADR-048): on sale, not past its last moment to order (`available_until`), at a
+ * fixed price in the business's own currency. A row when there is one; a setup plan's dry run reads the same. Its
+ * parameters: the moment, and the business's currency in capitals (`fixedProductParams`).
  */
-export const FIXED_PRODUCT_SQL = "SELECT 1 FROM products WHERE active = 1 AND price_model = 'fixed' LIMIT 1";
+export const FIXED_PRODUCT_SQL = `SELECT 1 FROM products WHERE active = 1 AND price_model = 'fixed'
+  AND (available_until IS NULL OR available_until > ?) AND upper(json_extract(price, '$.currency')) = ? LIMIT 1`;
+
+/** `FIXED_PRODUCT_SQL`'s parameters at `now`. */
+export async function fixedProductParams(db: Db, now: number): Promise<[number, string]> {
+  return [now, (await businessCurrency(db)).toUpperCase()];
+}
 
 /**
  * The owner's switches for what agents can do (`settings.doors`). Left out, a door follows what the
@@ -100,7 +108,10 @@ export async function offeredItemTypes(
   db: Db,
   elsewhere: readonly string[] = [],
   doors: DoorSwitches = {},
+  /** The moment asked about: a product past its last moment to order is no product to order. */
+  now: number = Date.now(),
 ): Promise<ItemType[]> {
+  const fixed = await fixedProductParams(db, now);
   const [services, open, products, fixedProducts, rooms] = await Promise.all([
     db.client.query({ sql: "SELECT id, price FROM services WHERE active = 1", params: [], method: "all" }),
     db.client.query({
@@ -109,7 +120,7 @@ export async function offeredItemTypes(
       method: "all",
     }),
     db.client.query({ sql: "SELECT 1 FROM products WHERE active = 1 LIMIT 1", params: [], method: "all" }),
-    db.client.query({ sql: FIXED_PRODUCT_SQL, params: [], method: "all" }),
+    db.client.query({ sql: FIXED_PRODUCT_SQL, params: fixed, method: "all" }),
     db.client.query({ sql: STAY_ROOM_OFFERED_SQL, params: [], method: "all" }),
   ]);
   const base = open.rows.find((r) => r[0] === null || r[0] === undefined);
@@ -147,7 +158,7 @@ export async function offeredItemTypes(
  * elsewhere it publishes (`publishedDoorsElsewhere`). The doors refuse an assistant's request of any other
  * kind from the same set (ADR-048), so what an agent reads and what it meets never differ.
  */
-export async function publishedItemTypes(db: Db): Promise<ItemType[]> {
+export async function publishedItemTypes(db: Db, now: number = Date.now()): Promise<ItemType[]> {
   const [[row], s] = await Promise.all([
     db.orm.select({ domain: business.domain }).from(business).limit(1),
     readSettings(db),
@@ -157,7 +168,13 @@ export async function publishedItemTypes(db: Db): Promise<ItemType[]> {
     db,
     elsewhere.map((d) => d.item_type),
     s.doors,
+    now,
   );
+}
+
+/** Where an assistant asks about a product the business does not sell here, among the kinds it takes (ADR-048). */
+export function askDoor(offered: readonly ItemType[]): "request_quote" | "send_message" | null {
+  return offered.includes("quote_request") ? "request_quote" : offered.includes("message") ? "send_message" : null;
 }
 
 const KIND_WORDS: Record<ItemType, string> = {

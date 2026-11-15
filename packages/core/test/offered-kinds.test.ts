@@ -1,6 +1,7 @@
 import { runMigrations } from "@surfingdog/platform";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
+import { publishedItemTypes } from "../src/capabilities/directory";
 import { Capabilities } from "../src/capabilities/service";
 import { createDb } from "../src/db";
 import { ulid } from "../src/ids";
@@ -104,6 +105,26 @@ describe("orders", () => {
     const loaf = await aProduct(s.caps, { name: "Loaf", value: 450 });
     expect((await s.caps.getBusinessProfile()).item_types).toEqual(["message", "quote_request", "order", "refund"]);
     expect((await order(loaf)).view.item.type).toBe("order");
+  });
+
+  it("are not offered while the only product at a fixed price is past its last day, or priced in another currency", async () => {
+    const s = await setup();
+    const loaf = await aProduct(s.caps, { name: "Loaf", value: 450 });
+    await s.db.orm
+      .update(products)
+      .set({ availableUntil: T0 - DAY })
+      .where(eq(products.id, loaf));
+    // As of the request: past its last day, no order is offered, nor a refund, and the order is refused as one.
+    expect(await publishedItemTypes(s.db, T0)).toEqual(["message", "quote_request"]);
+    const late = await refused(
+      s.caps.createOrder(agent, { payload: { orderedItem: [{ productId: loaf, quantity: 1 }] }, contact } as never),
+    );
+    expect(late.details).toMatchObject({ reason: "order_not_offered" });
+    // A product priced in another currency than the business's is not one an order names either.
+    await aProduct(s.caps, { name: "Mug", value: 1_000, currency: "USD" });
+    expect(await publishedItemTypes(s.db, T0)).toEqual(["message", "quote_request"]);
+    await aProduct(s.caps, { name: "Bun", value: 120 });
+    expect(await publishedItemTypes(s.db, T0)).toEqual(["message", "quote_request", "order", "refund"]);
   });
 
   it("answers a retry of an order already written, even once the last product went off sale", async () => {

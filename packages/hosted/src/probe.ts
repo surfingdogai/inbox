@@ -145,24 +145,40 @@ export interface ProbeProduct {
   readonly price: unknown;
   readonly price_model?: string;
   readonly active: number;
+  /** The last moment it can be ordered. */
+  readonly available_until?: string | undefined;
 }
 
 /**
- * The product the order probe orders: the first on sale at a fixed price. A price on request has none
- * (`price: null`), and a `from` or `range` price is only where it starts, which goes to a person to quote.
+ * The product the order probe orders: the first on sale at a fixed price, as an assistant's order may name it
+ * (ADR-048): not past its last moment to order, and priced in the business's `currency` when it is given. A price
+ * on request has none (`price: null`), and a `from` or `range` price is only where it starts, which goes to a
+ * person to quote.
  */
-export function orderableProduct(items: readonly ProbeProduct[]): ProbeProduct | { readonly none: string } {
-  const onSale = items.filter((p) => p.active !== 0);
+export function orderableProduct(
+  items: readonly ProbeProduct[],
+  o: { readonly now?: number; readonly currency?: string | undefined } = {},
+): ProbeProduct | { readonly none: string } {
+  const now = o.now ?? Date.now();
+  const onSale = items.filter(
+    (p) => p.active !== 0 && !(p.available_until !== undefined && Date.parse(p.available_until) <= now),
+  );
   if (!onSale.length) return { none: "no product to order" };
-  const fixed = onSale.find((p) => (p.price_model ?? "fixed") === "fixed" && p.price !== null && p.price !== undefined);
+  const ours = (p: ProbeProduct) =>
+    !o.currency ||
+    String((p.price as { currency?: unknown } | null)?.currency ?? "").toUpperCase() === o.currency.toUpperCase();
+  const fixed = onSale.find(
+    (p) => (p.price_model ?? "fixed") === "fixed" && p.price !== null && p.price !== undefined && ours(p),
+  );
   return fixed ?? { none: "no fixed-price product to order" };
 }
 
 async function probeOrder(call: Call, create: Create, result: Result): Promise<ProbeResult> {
-  const products = (await (await call("GET", "/v1/products?limit=50")).json().catch(() => null)) as {
-    items?: ProbeProduct[];
-  } | null;
-  const product = orderableProduct(products?.items ?? []);
+  const [products, profile] = await Promise.all([
+    (await call("GET", "/v1/products?limit=50")).json().catch(() => null) as Promise<{ items?: ProbeProduct[] } | null>,
+    (await call("GET", "/v1/business")).json().catch(() => null) as Promise<{ currency?: string } | null>,
+  ]);
+  const product = orderableProduct(products?.items ?? [], { currency: profile?.currency });
   if ("none" in product) return { door: "order", ok: false, status: 0, detail: product.none };
   return await result(
     "order",

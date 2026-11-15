@@ -23,6 +23,25 @@ describe("the order probe", () => {
     });
   });
 
+  it("orders none past its last day to order, nor one priced in another currency than the business's", () => {
+    const now = Date.parse("2026-11-16T09:00:00Z");
+    const items = [
+      {
+        id: "eggnog",
+        name: "Eggnog",
+        price: { value: 600, currency: "EUR" },
+        active: 1,
+        available_until: "2026-01-06T23:59:59Z",
+      },
+      { id: "mug", name: "Mug", price: { value: 1_000, currency: "USD" }, active: 1 },
+      { id: "tea", name: "Tea", price: { value: 300, currency: "EUR" }, active: 1 },
+    ];
+    expect(orderableProduct(items, { now, currency: "EUR" })).toMatchObject({ id: "tea" });
+    expect(orderableProduct(items.slice(0, 2), { now, currency: "EUR" })).toEqual({
+      none: "no fixed-price product to order",
+    });
+  });
+
   it("says why there is nothing to order", () => {
     expect(orderableProduct([])).toEqual({ none: "no product to order" });
     expect(orderableProduct([{ id: "cake", name: "Cake", price: null, price_model: "quote", active: 1 }])).toEqual({

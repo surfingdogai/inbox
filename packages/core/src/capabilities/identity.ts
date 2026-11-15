@@ -36,7 +36,7 @@ import { findIdempotent, threadEntryStatement } from "../write/common";
 import { ACKNOWLEDGED, type CreateInput, type CreateResult, type CreateScreener, createItem } from "../write/create";
 import { WriteError } from "../write/errors";
 import { checkBookingPrice, checkOrderLines } from "../write/pricing";
-import { notOffered, publishedItemTypes } from "./directory";
+import { askDoor, notOffered, publishedItemTypes } from "./directory";
 
 /**
  * People and customers at the doors (ADR-017 §2.1, §8.1–§8.4): the create that presents what the
@@ -192,14 +192,14 @@ export class IdentityCapabilities {
    */
   private async refuseAssistantRequest(caller: Caller, input: CreateInput, now: number): Promise<void> {
     const kind = input.type;
-    if (kind === "booking" || kind === "quote_request" || kind === "order" || kind === "stay") {
-      const offered = await publishedItemTypes(this.db);
-      if (!offered.includes(kind)) throw notOffered(kind, offered);
-    }
+    if (kind !== "booking" && kind !== "quote_request" && kind !== "order" && kind !== "stay") return;
+    const offered = await publishedItemTypes(this.db, now);
+    if (!offered.includes(kind)) throw notOffered(kind, offered);
     if (kind !== "order" && kind !== "booking") return;
     const counters = (await readSettings(this.db)).negotiation.priceCounters;
-    if (kind === "order") await checkOrderLines(this.db, input.payload, { pricing: input.pricing, now, counters });
-    else await checkBookingPrice(this.db, input.payload as PayloadOf<"booking">, { counters });
+    if (kind === "order") {
+      await checkOrderLines(this.db, input.payload, { pricing: input.pricing, now, counters, ask: askDoor(offered) });
+    } else await checkBookingPrice(this.db, input.payload as PayloadOf<"booking">, { counters });
   }
 
   /**

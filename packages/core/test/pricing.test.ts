@@ -563,7 +563,7 @@ describe("what is on sale, and how many there are", () => {
         caps.createOrder(agent, { payload: { orderedItem: [line], totalPrice: EUR(1_850) } }),
       ).rejects.toMatchObject({
         code: "invalid_input",
-        fields: [{ path: "payload.orderedItem.0", message: "not on sale" }],
+        fields: [{ path: "payload.orderedItem.0", message: "not on sale: leave this line out" }],
       });
     }
     expect(await db.orm.select({ id: items.id }).from(items)).toEqual([]);

@@ -34,7 +34,7 @@ import { servicePriceText } from "../util/money";
 import { type Caller, isCustomer, nowOf } from "../write/caller";
 import { fromZod, WriteError } from "../write/errors";
 import { type Closure, readClosures } from "./closures";
-import { type DoorSwitches, FIXED_PRODUCT_SQL, STAY_ROOM_OFFERED_SQL } from "./directory";
+import { type DoorSwitches, FIXED_PRODUCT_SQL, fixedProductParams, STAY_ROOM_OFFERED_SQL } from "./directory";
 import type { Capabilities } from "./service";
 import { hasAmount, PRESET_NAMES, servicePriceKey, validTimezone } from "./setup";
 import {
@@ -753,7 +753,7 @@ async function readState(caps: Capabilities, db: Db, caller: Caller): Promise<St
     readClosures(db),
     caps.setup.listRules(caller),
     db.client.query({ sql: "SELECT 1 FROM products WHERE active = 1 LIMIT 1", method: "all" }),
-    db.client.query({ sql: FIXED_PRODUCT_SQL, params: [], method: "all" }),
+    db.client.query({ sql: FIXED_PRODUCT_SQL, params: await fixedProductParams(db, nowOf(caller)), method: "all" }),
     readSettings(db),
     db.client.query({ sql: STAY_ROOM_OFFERED_SQL, params: [], method: "all" }),
   ]);
