@@ -266,6 +266,11 @@ or network:
   publishes only the return policies its owner wrote: with none, its policies document has no default return policy,
   and an offer's returns are not known. No schema, vector or vocabulary changes: nothing a 0.17.0 reader reads
   changes.
+- 0.18 (a network that carries requests): the person's name is required on a carried request (`carryContactSchema`,
+  `schemas/mcp-ask-business-input.json`, `mcp-request-quote-input.json`, `mcp-request-booking-input.json`,
+  `mcp-request-stay-input.json`; protocol §4.17, ADR-048). An inbox at 0.18 refuses an assistant's new request without
+  its person's name and an email or a phone (`422 invalid_input`, `details.reason "client_details"`); a network relays
+  that as refused.
 
 A version number is given when a change merges, in the order changes merge. Work in progress names no number, so
 two changes built side by side never claim the same one.

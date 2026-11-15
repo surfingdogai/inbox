@@ -55,13 +55,13 @@
           "description": "Your person's email address, which they agreed to give this business for its answer."
         },
         "name": {
-          "description": "The name your person wants the business to use.",
           "type": "string",
           "minLength": 1,
-          "maxLength": 100
+          "maxLength": 100,
+          "description": "Your person's name, as they gave it for the business to use. A business's inbox refuses a request without it."
         }
       },
-      "required": ["email"],
+      "required": ["email", "name"],
       "additionalProperties": false
     },
     "consent": {

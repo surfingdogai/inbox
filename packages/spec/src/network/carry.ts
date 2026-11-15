@@ -8,9 +8,9 @@ import { timestampSchema } from "./common";
  * unless the owner switched it off; a manifest without it is carried nothing). The network keeps only a record that it was delivered: when, to which
  * business, and the outcome. Nothing anyone wrote, and nothing about the person.
  *
- * The person's contact is an email address they agreed to give the business, never a phone
- * number. The answer is the inbox's own: its item, its words, and the access token it hands an
- * anonymous creator.
+ * The person's contact is their name and an email address they agreed to give the business, never a
+ * phone number (spec 0.18: a business's inbox refuses a request without the name, ADR-048). The answer
+ * is the inbox's own: its item, its words, and the access token it hands an anonymous creator.
  */
 
 /** A domain as search_businesses and get_business give it. */
@@ -23,7 +23,10 @@ const domainArg = z
 /** An email address, as a person types it: one @, a dot after it, no spaces. */
 export const CARRY_EMAIL_PATTERN = '^[^\\s@<>()\\[\\],;:"]{1,64}@[^\\s@<>()\\[\\],;:"]+\\.[^\\s@<>()\\[\\],;:"]{2,}$';
 
-/** Where the business can answer: an email address the person agreed to give it. Never a phone number. */
+/**
+ * Who the request is from, as the person agreed to give it to the business: their name and an email address.
+ * Never a phone number. Since 0.18 the name is required: a business's inbox refuses a request without it.
+ */
 export const carryContactSchema = z
   .strictObject({
     email: z
@@ -31,14 +34,23 @@ export const carryContactSchema = z
       .max(254)
       .regex(new RegExp(CARRY_EMAIL_PATTERN))
       .describe("Your person's email address, which they agreed to give this business for its answer."),
-    name: z.string().min(1).max(100).optional().describe("The name your person wants the business to use."),
+    name: z
+      .string()
+      .trim()
+      .min(1)
+      .max(100)
+      .describe(
+        "Your person's name, as they gave it for the business to use. A business's inbox refuses a request without it.",
+      ),
   })
-  .describe("Where the business can answer. Only an email address and a name: never a phone number.");
+  .describe(
+    "Who the request is from, as your person agreed to give it to this business: their name and their email address. Never a phone number.",
+  );
 
 const consentArg = z
   .literal(true)
   .describe(
-    "true only when your person agreed to give this business their email address for its answer. Without it nothing is sent.",
+    "true only when your person agreed to give this business their name and email address for its answer. Without it nothing is sent.",
   );
 
 const languageArg = z

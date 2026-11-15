@@ -63,20 +63,20 @@
           "description": "Your person's email address, which they agreed to give this business for its answer."
         },
         "name": {
-          "description": "The name your person wants the business to use.",
           "type": "string",
           "minLength": 1,
-          "maxLength": 100
+          "maxLength": 100,
+          "description": "Your person's name, as they gave it for the business to use. A business's inbox refuses a request without it."
         }
       },
-      "required": ["email"],
+      "required": ["email", "name"],
       "additionalProperties": false,
-      "description": "Where the business can answer. Only an email address and a name: never a phone number."
+      "description": "Who the request is from, as your person agreed to give it to this business: their name and their email address. Never a phone number."
     },
     "consent": {
       "type": "boolean",
       "const": true,
-      "description": "true only when your person agreed to give this business their email address for its answer. Without it nothing is sent."
+      "description": "true only when your person agreed to give this business their name and email address for its answer. Without it nothing is sent."
     },
     "language": {
       "description": "The language your person wants the answer in, as a tag like en, pt or pt-BR.",
