@@ -69,6 +69,7 @@ import {
   offerBodies,
   offerModeFor,
   offerSections,
+  orderable,
   ownerEmailDoc,
   quickKind,
   SETUP_NETWORK,
@@ -283,8 +284,9 @@ function SetupWizard() {
     setPicked({ currency: true, lang: true });
   }, [profile.data, profileRead]);
   const [chosenDoors, setDoors] = useState<WizardDoors>(() => defaultDoors(undefined));
-  // With a product listed, ordering is open whatever was chosen: the doors are shown and saved beside it.
-  const listed = (products.data?.items ?? []).filter((p) => p.active).length;
+  // With a product an order can name (at a fixed price), ordering is open whatever was chosen: the doors are shown
+  // and saved beside it. One priced on request opens no ordering.
+  const listed = orderable(products.data?.items ?? [], profile.data?.currency);
   const doors = withListed(chosenDoors, kind, listed);
   // The limits beside the doors, from what Settings say: how long before it can be cancelled, a discount, how paid.
   const [terms, setTerms] = useState<WizardTerms>(() => termsOf(undefined));
@@ -1439,7 +1441,8 @@ function laterLine(sections: readonly OfferSection[], doors: WizardDoors): strin
         : "Agents can still ask for a price in their own words.",
     );
   }
-  if (sections.includes("products")) lines.push("Ordering opens once you add a product: Settings → Products.");
+  if (sections.includes("products"))
+    lines.push("Ordering opens once you add a product at a fixed price: Settings → Products.");
   return lines.join(" ");
 }
 
@@ -1581,7 +1584,7 @@ function Finished({
           {missing?.products && (
             <li>
               <b>Products.</b> Settings → Products, or your shop in Settings → Integrations: ordering opens with the
-              first.
+              first at a fixed price.
             </li>
           )}
           {missing?.rooms && (

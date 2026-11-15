@@ -277,6 +277,10 @@ export interface ProductRow {
   /** 0: kept off networks. */
   readonly listed?: number | undefined;
   readonly source?: string | undefined;
+  /** How its price is meant (catalogue version 2): read leniently, since an older server sends none (fixed). */
+  readonly priceModel?: string | undefined;
+  /** The last moment it can be ordered, in milliseconds. */
+  readonly availableUntil?: number | null | undefined;
   readonly createdAt: number;
   readonly updatedAt: number;
 }
