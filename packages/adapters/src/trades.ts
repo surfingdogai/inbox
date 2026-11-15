@@ -4,7 +4,7 @@ import type { Context, Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
 import { z } from "zod";
 import { clientAddress } from "./limits";
-import { problemFrom, problemResponse } from "./problem";
+import { problemFrom, problemResponse, problemText } from "./problem";
 import type { CallerEnv } from "./rest";
 import { validator } from "./validate";
 
@@ -22,12 +22,7 @@ const ok = (text: string, structured: unknown): CallToolResult => ({
 
 const failed = (error: unknown): CallToolResult => {
   const p = problemFrom(error);
-  const fields = p.fields?.length ? ` Fix: ${p.fields.map((f) => `${f.path} (${f.problem})`).join(", ")}.` : "";
-  return {
-    content: [{ type: "text", text: `${p.title}: ${p.detail}${fields}` }],
-    structuredContent: { error: p },
-    isError: true,
-  };
+  return { content: [{ type: "text", text: problemText(p) }], structuredContent: { error: p }, isError: true };
 };
 
 /** Whether the business says where it works: `check_area` is offered then. */

@@ -84,6 +84,19 @@ export function problemFrom(error: unknown): Problem {
   };
 }
 
+/**
+ * A refusal as an assistant reads it in a tool's text: the sentence, then each field to fix. A person's details
+ * are said in full (ADR-048): what each one needs, and that an email or a phone will do, so an assistant asks
+ * its person for what is missing and nothing more.
+ */
+export function problemText(p: Problem): string {
+  const full = p.details?.reason === "client_details";
+  const fields = p.fields?.length
+    ? ` Fix: ${p.fields.map((f) => `${f.path} (${f.problem}${full ? `: ${f.message}` : ""})`).join(", ")}.`
+    : "";
+  return `${p.title}: ${p.detail}${fields}`;
+}
+
 export function problemResponse(c: Context, error: unknown): Response {
   const p = problemFrom(error);
   // A refusal that says when to try again says it in the header too: too many requests, or an

@@ -5,6 +5,9 @@ import {
   clientName,
   clientPhone,
   type Db,
+  fillerEmail,
+  fillerName,
+  fillerPhone,
   fillStayTemplate,
   formatMinor,
   type Item,
@@ -1201,26 +1204,32 @@ export interface Lead {
 
 /**
  * The lead UCP requires before a session is ready: a booker named and reachable, a primary guest named and
- * reachable, or a booker who is reachable with a primary guest who is named. Null when there is none yet;
- * a message when an address cannot be one. Guests' ids are only matched here, never kept. A name, an address
- * and a number are judged as every door judges a client's details (ADR-048), so a lead taken here is never
- * refused when the stay is held.
+ * reachable, or a booker who is reachable with a primary guest who is named. Null when there is none yet.
+ * Guests' ids are only matched here, never kept. Every address and number sent, and the booker's and the
+ * primary guests' names, are judged as every door judges a client's details (ADR-048), and one that is wrong
+ * is named, path and all, so a lead taken here is never refused when the stay is held. `live`: a session that
+ * is not a test, whose details are also refused when they are placeholders.
  */
-export function leadOf(req: UcpSessionRequest): Lead | null | { messages: UcpMessage[] } {
+export function leadOf(
+  req: UcpSessionRequest,
+  o: { readonly live?: boolean } = {},
+): Lead | null | { messages: UcpMessage[] } {
+  const live = o.live !== false;
   const full = (p?: { first_name?: string | undefined; last_name?: string | undefined }) =>
     p?.first_name && p.last_name ? `${p.first_name} ${p.last_name}` : null;
-  /** The lead's name, as every door judges a client's (ADR-048); the other guests' are kept as they came. */
-  const named = (p?: { first_name?: string | undefined; last_name?: string | undefined }) => clientName(full(p));
-  for (const [where, email] of [
-    ["$.booker.email", req.booker?.email],
-    ...(req.guests ?? []).map((g, i) => [`$.guests[${i}].email`, g.email] as const),
-  ] as const) {
-    if (email && !clientEmail(email))
-      return { messages: [error("invalid", "Not an email address.", "recoverable", where)] };
-  }
   const primaryIds = new Set(
     req.stays.flatMap((s) => (s.guest_assignments ?? []).filter((a) => a.role === "primary").map((a) => a.guest_id)),
   );
+  const people = [
+    ["$.booker", req.booker, true],
+    ...(req.guests ?? []).map((g, i) => [`$.guests[${i}]`, g, primaryIds.has(g.id)] as const),
+  ] as const;
+  for (const [where, p, lead] of people) {
+    if (!p) continue;
+    const bad = wrongDetail(p, { live, name: lead ? full(p) : null });
+    if (bad) return { messages: [error("invalid", bad.says, "recoverable", `${where}.${bad.field}`)] };
+  }
+  const named = (p?: { first_name?: string | undefined; last_name?: string | undefined }) => clientName(full(p));
   const primary = (req.guests ?? []).find((g) => primaryIds.has(g.id) && named(g));
   const reach = (p?: { email?: string | undefined; phone_number?: string | undefined }) => {
     const email = clientEmail(p?.email);
@@ -1240,6 +1249,51 @@ export function leadOf(req: UcpSessionRequest): Lead | null | { messages: UcpMes
     return { name: primary ? (named(primary) as string) : bookerName, ...bookerReach, others };
   }
   if (primary && bookerReach) return { name: named(primary) as string, ...bookerReach, others };
+  return null;
+}
+
+/** The first detail of a booker's or a guest's that no door takes, with what to say of it; null when all are fine. */
+function wrongDetail(
+  p: { email?: string | undefined; phone_number?: string | undefined },
+  o: { readonly live: boolean; readonly name: string | null },
+): { field: "email" | "phone_number" | "first_name"; says: string } | null {
+  if (p.email) {
+    const email = clientEmail(p.email);
+    if (!email) return { field: "email", says: "Not an email address we can write to." };
+    if (o.live && fillerEmail(email)) {
+      return {
+        field: "email",
+        says: "This address receives no mail (a domain no mail reaches, or a no-reply mailbox): ask the guest for theirs.",
+      };
+    }
+  }
+  if (p.phone_number) {
+    const phone = clientPhone(p.phone_number);
+    if (!phone) {
+      return {
+        field: "phone_number",
+        says: "Not a phone number: 6 to 20 digits, no letters (no extension), only spaces, +, -, (, ), . or / between them.",
+      };
+    }
+    if (o.live && fillerPhone(phone)) {
+      return {
+        field: "phone_number",
+        says: "A placeholder, not a number the guest answers: ask the guest for theirs.",
+      };
+    }
+  }
+  if (o.name) {
+    const name = clientName(o.name);
+    if (!name) {
+      return {
+        field: "first_name",
+        says: "Not a name: first_name and last_name have a letter in them, no @, and at most 200 characters together.",
+      };
+    }
+    if (o.live && fillerName(name)) {
+      return { field: "first_name", says: "A placeholder, not the guest's name: ask the guest for theirs." };
+    }
+  }
   return null;
 }
 
@@ -2036,7 +2090,7 @@ export function mountUcpLodging(app: Hono<CallerEnv>, deps: UcpLodgingDeps): voi
     const now = clock();
     const status = extra.status ?? "incomplete";
     const req = row.state.req;
-    const lead = leadOf(req);
+    const lead = leadOf(req, { live: !c.get("caller")?.sandbox });
     const messages = [
       ...(extra.messages ?? []),
       ...(status === "incomplete" && lead === null
@@ -2152,7 +2206,7 @@ export function mountUcpLodging(app: Hono<CallerEnv>, deps: UcpLodgingDeps): voi
     const closed = await shut("subject" in asked ? asked.subject : null);
     if (closed) return refusal(closed.messages, 200, closed.url);
     if ("messages" in asked) return refusal(asked.messages);
-    const lead = leadOf(req);
+    const lead = leadOf(req, { live: !caller.sandbox });
     if (lead && "messages" in lead) return refusal(lead.messages);
     const now = clock();
     // Sessions that never held a room go a day after they lapse.
@@ -2253,7 +2307,7 @@ export function mountUcpLodging(app: Hono<CallerEnv>, deps: UcpLodgingDeps): voi
     // Everything the request says is checked before anything held is let go.
     const asked = subjectOf(req, setup);
     if ("messages" in asked) return asIs(asked.messages);
-    const lead = leadOf(req);
+    const lead = leadOf(req, { live: !caller.sandbox });
     if (lead && "messages" in lead) return asIs(lead.messages);
     const held = item?.state === "held" ? item : null;
     const accepted = (subject: Subject, quote: StayQuote, validThrough: string): SessionState => ({

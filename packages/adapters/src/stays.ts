@@ -3,7 +3,7 @@ import { type Caller, type Capabilities, stayInputs as I, WriteError, withIdempo
 import type { Hono } from "hono";
 import { describeRoute } from "hono-openapi";
 import { z } from "zod";
-import { problemFrom } from "./problem";
+import { problemFrom, problemText } from "./problem";
 import type { CallerEnv } from "./rest";
 import { validator } from "./validate";
 
@@ -24,12 +24,7 @@ const ok = (text: string, structured: unknown): CallToolResult => ({
 
 const failed = (error: unknown): CallToolResult => {
   const p = problemFrom(error);
-  const fields = p.fields?.length ? ` Fix: ${p.fields.map((f) => `${f.path} (${f.problem})`).join(", ")}.` : "";
-  return {
-    content: [{ type: "text", text: `${p.title}: ${p.detail}${fields}` }],
-    structuredContent: { error: p },
-    isError: true,
-  };
+  return { content: [{ type: "text", text: problemText(p) }], structuredContent: { error: p }, isError: true };
 };
 
 /** The terms to show the person before they are bound is the question to put to them, not a failure. */

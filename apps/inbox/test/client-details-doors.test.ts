@@ -300,6 +300,44 @@ describe("REST", () => {
     }
   });
 
+  it("judges what was sent by the client rule on every door, in the same words: a bad address, a long name, a blank email", async () => {
+    const s = await workshop();
+    const client = await s.mcp();
+    const wrong = [
+      { contact: { name: "Rita", email: "rita@" }, invalid: ["email"] },
+      { contact: { name: "R".repeat(201), phone: "+351 912 345 678" }, invalid: ["name"] },
+      { contact: { name: "Rita", phone: "9".repeat(41) }, invalid: ["phone"] },
+    ];
+    for (const { contact, invalid } of wrong) {
+      const res = await s.call("POST", "/v1/bookings", { ...s.bodies["/v1/bookings"], contact });
+      expect(res.status, JSON.stringify(contact)).toBe(422);
+      const p = (await res.json()) as Problem;
+      expect(p.details, JSON.stringify(contact)).toMatchObject({ reason: "client_details", missing: [], invalid });
+      expect(p.detail).toMatch(/^To take this booking we need your person's details as they give them\. contact\./);
+      const r = (await client.callTool({
+        name: "create_booking",
+        arguments: { ...s.tools.create_booking, contact },
+      })) as { isError?: boolean; content: { text: string }[]; structuredContent?: { error?: Problem } };
+      expect(r.isError).toBe(true);
+      expect(r.content[0]?.text).toMatch(/^Invalid input: To take this booking we need your person's details/);
+      expect(r.structuredContent?.error?.details).toMatchObject({ reason: "client_details", invalid });
+    }
+    await client.close();
+    // A blank email beside a phone is no email: the phone is enough. Stored trimmed.
+    const res = await s.call("POST", "/v1/messages", {
+      body: "Open on Saturday?",
+      contact: { name: "  Rita Silva ", email: "", phone: " +351 912 345 678 " },
+    });
+    expect(res.status, await res.clone().text()).toBe(201);
+    const { rows } = await s.db.client.query({ sql: "SELECT display_name, contact FROM parties", method: "all" });
+    expect(rows[0]?.[0]).toBe("Rita Silva");
+    expect(JSON.parse(String(rows[0]?.[1]))).toMatchObject({ name: "Rita Silva", phone: "+351 912 345 678" });
+    // The business's own key is held to an address that is one, in the same words, and asked for nothing else.
+    const own = await s.call("POST", "/v1/messages", { body: "Called", contact: { email: "rita@" } }, s.integration);
+    expect(own.status).toBe(422);
+    expect(((await own.json()) as Problem).details).toMatchObject({ reason: "client_details", invalid: ["email"] });
+  });
+
   it("says what to bring in /openapi.json", async () => {
     const s = await workshop();
     const doc = (await (await s.call("GET", "/openapi.json")).json()) as Record<string, unknown>;
@@ -347,7 +385,10 @@ describe("MCP", () => {
       };
       expect(r.isError, name).toBe(true);
       expect(r.content[0]?.text, name).toMatch(/^Invalid input: To take this /);
-      expect(r.content[0]?.text, name).toContain("Fix: contact.name (missing), contact.email (missing).");
+      // What each detail needs, said in full: an email or a phone will do.
+      expect(r.content[0]?.text, name).toContain(
+        "Fix: contact.name (missing: your person's name, as they give it), contact.email (missing: an email address, or a phone number in contact.phone).",
+      );
     }
     expect(await s.count("items")).toBe(0);
     for (const [name, args] of Object.entries(s.tools)) {
@@ -459,7 +500,10 @@ describe("people, who are never refused for it", () => {
       }),
     );
     expect(sent.status).toBe(422);
-    expect(await sent.text()).toContain("Please fill in your name, your email and the rest of the form.");
+    // They filled every field in: told what is wrong with the one that is, never to fill it in.
+    const said = await sent.text();
+    expect(said).toContain("Please write your name in letters, as you&#39;d like us to call you.");
+    expect(said).not.toContain("Please fill in your name");
     expect(await s.count("items")).toBe(0);
   });
 });

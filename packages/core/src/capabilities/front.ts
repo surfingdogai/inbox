@@ -376,15 +376,18 @@ function visitor(lang: CustomerLang, key: string, now: number): Caller {
 }
 
 /**
- * The person's name and address, or what is wrong with them: judged as every door judges a client's
- * details (ADR-048), a name with a letter in it and an address the business can write to. The page asks
- * for an email, since it has no phone field.
+ * The person's name and address, or what is wrong with them, said as it is: judged by the shape every door
+ * holds a client's details to (ADR-048), a name with a letter in it and no "@", and an address the business can
+ * write to. A person is never second-guessed for a name that looks like a placeholder: that is assistants'. The
+ * page asks for an email, since it has no phone field.
  */
 function person(lang: CustomerLang, form: FrontForm): { name: string; email: string } | { error: string } {
   const f = frontCopy(lang);
-  const name = clientName((form.name ?? "").slice(0, NAME_MAX));
+  const typed = (form.name ?? "").slice(0, NAME_MAX).trim();
   const raw = (form.email ?? "").slice(0, EMAIL_MAX).trim();
-  if (!name || !raw) return { error: f.missing };
+  if (!typed || !raw) return { error: f.missing };
+  const name = clientName(typed);
+  if (!name) return { error: f.badName };
   const email = clientEmail(raw);
   if (!email) return { error: f.badEmail };
   return { name, email };

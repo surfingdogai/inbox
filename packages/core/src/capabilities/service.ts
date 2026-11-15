@@ -1483,14 +1483,16 @@ export class Capabilities {
     const pricing = await this.customer.pricingFor(c, input);
     // An assistant's order (ADR-048): a kind the business takes, from a person it can answer, for products
     // it sells at its prices in its currency. All of it before the kitchen, a summary or a file.
-    if (!replay && clientRequired(c)) {
+    if (!replay) {
       await this.refuseNotOffered(c, "order");
       requireClient(c, input.contact, "order");
-      await checkOrderLines(this.db, input.payload, {
-        pricing,
-        now: nowOf(c),
-        counters: (await readSettings(this.db)).negotiation.priceCounters,
-      });
+      if (clientRequired(c)) {
+        await checkOrderLines(this.db, input.payload, {
+          pricing,
+          now: nowOf(c),
+          counters: (await readSettings(this.db)).negotiation.priceCounters,
+        });
+      }
     }
     const lang = input.contact?.locale ?? caller.locale ?? "en";
     const checked = replay ? null : await this.food.checkOrder(c, input.payload, { lang });

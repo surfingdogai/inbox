@@ -79,27 +79,29 @@ export const contactSchema = z.object({
 export type Contact = z.infer<typeof contactSchema>;
 
 /**
- * Who a new request is from, as the doors read it (ADR-048): listed with `name` required, read as sent, so a
- * request without it is answered by the client rule in its own words on every door. No `anyOf`: at least one
- * of email and phone is said in words and checked by `requireClient`.
+ * Who a new request is from, as the doors read it (ADR-048): listed with `name` required, and read as sent,
+ * trimmed: a request without a detail, or with one that is not what it says, is answered by the client rule
+ * (`requireClient`) in its own words on every door, never by the schema. Its JSON Schema still says what each
+ * detail is (a format, a length). No `anyOf`: at least one of email and phone is said in words.
  */
 export const clientContactSchema = z
   .object({
-    name: z
-      .string()
-      .max(200)
-      .optional()
-      .meta({ minLength: 1, description: "Their name, as they want the business to use it." }),
-    email: z
-      .email({ error: "not an email address we can write to: ask your person for it again" })
-      .max(254)
-      .optional()
-      .describe("An email address the business can answer them at."),
-    phone: z
-      .string()
-      .max(40)
-      .optional()
-      .describe("A phone number the business can reach them on, with its country code: +351 912 345 678."),
+    name: z.string().trim().optional().meta({
+      minLength: 1,
+      maxLength: 200,
+      description:
+        "Their name, as they want the business to use it: with a letter in it and no @. Never a placeholder (N/A, Test, {{name}}).",
+    }),
+    email: z.string().trim().optional().meta({
+      format: "email",
+      maxLength: 254,
+      description: "An email address the business can answer them at: one that receives mail, not a no-reply one.",
+    }),
+    phone: z.string().trim().optional().meta({
+      maxLength: 40,
+      description:
+        "A phone number the business can reach them on, with its country code: +351 912 345 678. 6 to 20 digits, no letters (no extension), and only spaces, +, -, (, ), . or / between them.",
+    }),
     locale: z.string().max(12).optional().describe("The language they want answers in: en, pt."),
   })
   .meta({

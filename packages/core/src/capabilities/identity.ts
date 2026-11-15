@@ -97,7 +97,7 @@ export class IdentityCapabilities {
     }
     // Every new request of an assistant's carries its person's name and a way to reach them (ADR-048):
     // whichever door it came through, nothing is presented, asked or written without them.
-    requireClient(caller, input.contact, input.type);
+    requireClient(caller, input.contact, input.type, { test: input.flags?.sandbox === true });
     // Nothing is asked of a network for a request the create would refuse anyway, and nothing at
     // all for a test item: it emails nobody and contacts no network (the founder, 23 September 2026).
     // A customer's order is read as its request may send it, its prices left to the catalogue.

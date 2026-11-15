@@ -73,7 +73,7 @@ import {
 import { z } from "zod";
 import { TOOL_SCOPES } from "./access";
 import { foodInstructions, hasMenuDoors, registerOwnerFoodTools, registerPublicFoodTools } from "./food";
-import { problemFrom } from "./problem";
+import { problemFrom, problemText } from "./problem";
 import { registerOwnerStayTools, registerPublicStayTools, STAY_INSTRUCTIONS } from "./stays";
 import { registerPublicTradesTools, TRADES_INSTRUCTIONS, takesWork } from "./trades";
 import { itemTexts, ownerSentence, withUntrusted } from "./untrusted";
@@ -195,12 +195,7 @@ const toOk = (r: { text: string; structured: unknown }): [string, unknown] => [r
 
 const failed = (error: unknown): CallToolResult => {
   const p = problemFrom(error);
-  const fields = p.fields?.length ? ` Fix: ${p.fields.map((f) => `${f.path} (${f.problem})`).join(", ")}.` : "";
-  return {
-    content: [{ type: "text", text: `${p.title}: ${p.detail}${fields}` }],
-    structuredContent: { error: p },
-    isError: true,
-  };
+  return { content: [{ type: "text", text: problemText(p) }], structuredContent: { error: p }, isError: true };
 };
 
 /** A create that waits for the customer's confirmation is not a failure: it is the question to put to them. */

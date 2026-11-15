@@ -15,6 +15,9 @@ import {
   clientName,
   clientPhone,
   createItem,
+  fillerEmail,
+  fillerName,
+  fillerPhone,
   transitionItem,
   WriteError,
 } from "../src/write/index";
@@ -212,16 +215,47 @@ const CASES: readonly {
     sent: { name: "1234", email: "rita@example.com" },
     missing: [],
     invalid: ["name"],
-    fields: [{ path: "contact.name", problem: "invalid", message: "a name, with a letter in it and no email address" }],
-    first: (what) => `To take ${what} we need your person's details as they give them. contact.name is not a name.`,
+    fields: [
+      { path: "contact.name", problem: "invalid", message: "a name: a letter in it, no @, at most 200 characters" },
+    ],
+    first: (what) =>
+      `To take ${what} we need your person's details as they give them. contact.name is not a name: it has a letter in it, no @, and at most 200 characters.`,
   },
   {
     sent: { name: "Rita", phone: "call me" },
     missing: [],
     invalid: ["phone"],
-    fields: [{ path: "contact.phone", problem: "invalid", message: "a phone number with 6 to 20 digits" }],
+    fields: [
+      {
+        path: "contact.phone",
+        problem: "invalid",
+        message:
+          "a phone number: 6 to 20 digits, no letters (no extension), only spaces, +, -, (, ), . or / between them",
+      },
+    ],
     first: (what) =>
-      `To take ${what} we need your person's details as they give them. contact.phone is not a phone number.`,
+      `To take ${what} we need your person's details as they give them. contact.phone is not a phone number: it has 6 to 20 digits, no letters (no extension), and only spaces, +, -, (, ), . or / between them.`,
+  },
+  {
+    // What an assistant writes when it has nothing: refused as placeholders, each saying so.
+    sent: { name: "N/A", email: "na@example.invalid", phone: "000000" },
+    missing: [],
+    invalid: ["name", "email", "phone"],
+    fields: [
+      {
+        path: "contact.name",
+        problem: "invalid",
+        message: "your person's own name, not a placeholder (N/A, Test, {{name}}) or a link",
+      },
+      {
+        path: "contact.email",
+        problem: "invalid",
+        message: "an address that receives mail: not at .invalid, .test or localhost, and not a no-reply one",
+      },
+      { path: "contact.phone", problem: "invalid", message: "the number your person answers, not 000000 or 123456" },
+    ],
+    first: (what) =>
+      `To take ${what} we need your person's details as they give them. contact.name is a placeholder, not your person's name; contact.email receives no mail: it is at a domain no mail reaches, or a no-reply mailbox; contact.phone is a placeholder, not a number your person answers.`,
   },
 ];
 
@@ -235,18 +269,111 @@ const WHAT = {
 
 describe("what counts as a client's details", () => {
   it("is a name with a letter and no address, an address a business can write to, a number with 6 to 20 digits", () => {
-    for (const name of ["Rita Silva", "R", "María López", "  Rita  "]) expect(clientName(name), name).toBe(name.trim());
-    for (const name of ["", "   ", "1234", "rita@example.com", "x".repeat(201), 42, undefined]) {
-      expect(clientName(name), String(name)).toBeNull();
+    for (const name of ["Rita Silva", "R", "María López", "  Rita  ", "Jean-Luc O'Brien", "Rita & Rui"]) {
+      expect(clientName(name), name).toBe(name.trim());
     }
+    // Nothing to see: the Hangul filler, a zero-width space, a Braille blank.
+    for (const name of [
+      "",
+      "   ",
+      "1234",
+      "rita@example.com",
+      "Ana @ Lua",
+      "x".repeat(201),
+      "\u3164",
+      "\u3164 \u3164",
+    ]) {
+      expect(clientName(name), name).toBeNull();
+    }
+    for (const name of ["\u200b", "\u2800", 42, undefined]) expect(clientName(name), String(name)).toBeNull();
     expect(clientEmail("rita@example.com")).toBe("rita@example.com");
     expect(clientEmail(" rita@example.com ")).toBe("rita@example.com");
-    for (const email of ["", "rita@localhost", "Ana <ana@example.com>", "rita", "@example.com", 7]) {
+    for (const email of ["", "rita@localhost", "Ana <ana@example.com>", "rita", "@example.com", "rita@", 7]) {
       expect(clientEmail(email), String(email)).toBeNull();
     }
-    for (const phone of ["+351 912 345 678", "514-555-0199", "(02) 9374 4000"]) expect(clientPhone(phone)).toBe(phone);
-    for (const phone of ["", "call me", "+1 902", "12345", "+351 912 345 678 ext 5", "1".repeat(21)]) {
+    for (const phone of [
+      "+351 912 345 678",
+      "514-555-0199",
+      "(02) 5550 4000",
+      "912.345.678",
+      "+351 912\u2013345\u2013678",
+    ]) {
+      expect(clientPhone(phone), phone).toBe(phone);
+    }
+    for (const phone of ["", "call me", "+1 902", "12345", "+351 912 345 678 ext 5", "1".repeat(21), "!!111111!!"]) {
       expect(clientPhone(phone), phone).toBeNull();
+    }
+  });
+
+  it("is never what an assistant writes when it has none: a word for nobody, a label, a template, a test's filler", () => {
+    for (const name of [
+      "N/A",
+      "n.a.",
+      "null",
+      "undefined",
+      "None",
+      "Unknown",
+      "Anonymous",
+      "Your name",
+      "First Last",
+      "customer_name",
+      "{{customer_name}}",
+      "$customer_name",
+      "<name>",
+      "[Name]",
+      "%NAME%",
+      "https://spam.example/buy",
+      "www.spam.example",
+      "audit-fixturex",
+      "Placeholder Name",
+      "Test",
+      "Test User",
+      "John Doe",
+      "xxx",
+      "asdf",
+    ]) {
+      expect(fillerName(name), name).toBe(true);
+    }
+    for (const name of [
+      "Rita Silva",
+      "Ana Test",
+      "Door test",
+      "María López",
+      "Jean-Luc",
+      "Rita & Rui",
+      "Ai",
+      "Tester-Silva",
+    ]) {
+      expect(fillerName(name), name).toBe(false);
+    }
+    for (const email of [
+      "audit-fixturex@example.invalid",
+      "x@test.test",
+      "rita@mail.localhost",
+      "noreply@localhost.localdomain",
+      "rita@printer.local",
+      "rita@intranet.internal",
+      "noreply@oficinamare.example",
+      "no-reply@example.com",
+      "do-not-reply@example.com",
+    ]) {
+      expect(fillerEmail(email), email).toBe(true);
+    }
+    // The documentation names are how a guide or a test names a client: taken.
+    for (const email of [
+      "rita@example.com",
+      "ana@example.net",
+      "rui@example.org",
+      "aarav@guest.example",
+      "rita@gmail.example",
+    ]) {
+      expect(fillerEmail(email), email).toBe(false);
+    }
+    for (const phone of ["000000", "+0 000 000 000", "111 111 111", "123456", "+1 234 567 8901", "987654321"]) {
+      expect(fillerPhone(phone), phone).toBe(true);
+    }
+    for (const phone of ["+351 912 345 678", "514-555-0199", "+1 555 000001", "(02) 5550 4000"]) {
+      expect(fillerPhone(phone), phone).toBe(false);
     }
   });
 });
@@ -327,6 +454,36 @@ describe("an assistant's new request without its client", () => {
     // With a name and a number, the room is held.
     const held = await m.caps.stays.hold(stayGuest(), { ...ask, contact: { name: "Amara", phone: "+1 902 555 0147" } });
     expect(held.view.item.state).toBe("held");
+  });
+
+  it("is refused with a placeholder for a client, as it came again with filler text; a test may name a made-up one", async () => {
+    const s = await setup();
+    const fillers: Contact[] = [
+      { name: "ㅤ", phone: "000000" },
+      { name: "N/A", email: "na@example.com" },
+      { name: "audit-fixturex", email: "audit-fixturex@example.invalid" },
+      { name: "null", phone: "+0 000 000 000" },
+      { name: "undefined", email: "x@test.test" },
+      { name: "https://spam.example/buy", phone: "!!111111!!" },
+      { name: "{{customer_name}}", email: "noreply@localhost.localdomain" },
+      { name: "Rita Silva", email: "noreply@oficinamare.example" },
+      { name: "Rita Silva", phone: "123456" },
+    ];
+    for (const contact of fillers) {
+      const e = await refused(s.caps.sendMessage(agent(), { body: "audit-fixturex", contact }));
+      expect(e.details, JSON.stringify(contact)).toMatchObject({ reason: "client_details", missing: [] });
+      expect((e.details as { invalid: string[] }).invalid.length, JSON.stringify(contact)).toBeGreaterThan(0);
+    }
+    expect(await s.traces()).toMatchObject({ items: 0, parties: 0 });
+    // A test item emails nobody, so it may name a made-up client; one that is no name at all is refused still.
+    const test = { ...agent(), sandbox: true };
+    await s.caps.sendMessage(test, { body: "A test", contact: { name: "Test", email: "test@example.test" } });
+    const { rows } = await s.db.client.query({ sql: "SELECT sandbox FROM items", method: "all" });
+    expect(rows.map((r) => Number(r[0]))).toEqual([1]);
+    const none = await refused(
+      s.caps.sendMessage({ ...agent(), sandbox: true }, { body: "A test", contact: { name: "1234", phone: "!!" } }),
+    );
+    expect(none.details).toMatchObject({ invalid: ["name", "phone"] });
   });
 
   it("is refused when a network says it carried it: the header grants nothing", async () => {

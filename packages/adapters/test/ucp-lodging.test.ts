@@ -467,15 +467,36 @@ describe("requests", () => {
     expect(leadOf(ask({}, { booker: { first_name: "A", last_name: "B", email: "not an address" } }))).toEqual({
       messages: [expect.objectContaining({ code: "invalid", path: "$.booker.email" })],
     });
-    // Judged as every door judges a client's details (ADR-048): a number with letters reaches nobody, and a
-    // name with no letter is no name, so neither is a lead yet (the session asks for one, lead_guest_required).
-    expect(
-      leadOf(ask({}, { booker: { first_name: "Wanjiru", last_name: "Kamau", phone_number: "call me" } })),
-    ).toBeNull();
-    expect(leadOf(ask({}, { booker: { first_name: "1", last_name: "2", phone_number: "+254700000123" } }))).toBeNull();
+    // Judged as every door judges a client's details (ADR-048), and each one that is wrong is named, path and
+    // all: a number with letters reaches nobody, a name with no letter is no name, a placeholder is none.
+    expect(leadOf(ask({}, { booker: { first_name: "Wanjiru", last_name: "Kamau", phone_number: "call me" } }))).toEqual(
+      {
+        messages: [
+          expect.objectContaining({
+            code: "invalid",
+            path: "$.booker.phone_number",
+            content:
+              "Not a phone number: 6 to 20 digits, no letters (no extension), only spaces, +, -, (, ), . or / between them.",
+          }),
+        ],
+      },
+    );
+    expect(leadOf(ask({}, { booker: { first_name: "1", last_name: "2", phone_number: "+254 700 000 123" } }))).toEqual({
+      messages: [expect.objectContaining({ code: "invalid", path: "$.booker.first_name" })],
+    });
     expect(leadOf(ask({}, { booker: { first_name: "A", last_name: "B", email: "ana@localhost" } }))).toEqual({
       messages: [expect.objectContaining({ code: "invalid", path: "$.booker.email" })],
     });
+    for (const booker of [
+      { first_name: "Test", last_name: "User", email: "wanjiru@example.com" },
+      { first_name: "Wanjiru", last_name: "Kamau", email: "noreply@example.com" },
+      { first_name: "Wanjiru", last_name: "Kamau", phone_number: "000000" },
+    ]) {
+      const said = leadOf(ask({}, { booker }));
+      expect(said && "messages" in said && said.messages[0]?.code, JSON.stringify(booker)).toBe("invalid");
+      // A test session may name a made-up guest.
+      expect(leadOf(ask({}, { booker }), { live: false }), JSON.stringify(booker)).toMatchObject({ others: [] });
+    }
   });
 });
 

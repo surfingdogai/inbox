@@ -29,17 +29,27 @@ The founder's, 15 November 2026:
 - **Who.** `customer_agent` callers on every public door (REST, MCP, stays, UCP), signed or not, with an agent key
   or none, carried by a network or not: `Surfing-Dog-Carried` grants nothing. A person by email, on a form on the
   business's website or on its own page is never refused for this: their address, or the business's own form, is
-  how it answers them, and an email whose display name is an address keeps no name. The business writes down what
-  it knows (the owner, staff, its AI, its keys, a connector, a rule, the system), on these doors only with a key or
-  an AI app that may write items (`inbox:write`): a narrower one, a website's forms key or a read-only key, is
-  refused outside its scopes (`403 not_allowed`, `details.reason` `outside_scopes`), the forms key whatever the
-  owner set, as on every follow-up door. A follow-up belongs to an item
-  that has its client (a reply, details asked for, an answer to an offer, a cancellation, a withdrawal, a return,
-  the order or booking an accepted quote makes). A retry of a request already written is answered as it was.
-- **What counts.** A name: trimmed, 1 to 200 characters, a letter, no email address. An email address the networks'
-  normalisation takes, with a dot in its domain, at most 254 characters. A phone: 6 to 20 digits, no letters, at
-  most 40 characters. A name, and an email or a phone; sent but wrong, each is refused. Judged trimmed, stored as
-  sent, so a request's idempotency hash is what it sent.
+  how it answers them, and an email whose display name is an address keeps no name. The business's own page asks
+  for a name and an email, and holds them to the shape below, saying which one is wrong. The business writes down
+  what it knows (the owner, staff, its AI, its keys, a connector, a rule, the system), on these doors only with a
+  key or an AI app that may write items (`inbox:write`): a narrower one, a website's forms key or a read-only key,
+  is refused outside its scopes (`403 not_allowed`, `details.reason` `outside_scopes`), the forms key whatever the
+  owner set, as on every follow-up door. What the business's keys send is held to the shape the doors always held it
+  to (a name of at most 200 characters, an email address, a phone of at most 40), in the same words. A follow-up
+  belongs to an item that has its client (a reply, details asked for, an answer to an offer, a cancellation, a
+  withdrawal, a return, the order or booking an accepted quote makes). A retry of a request already written is
+  answered as it was.
+- **What counts.** A name: trimmed, 1 to 200 characters, a letter you can see (a name of fillers such as U+3164 is
+  none), no `@`. An email address the networks' normalisation takes, with a dot in its domain, at most 254
+  characters. A phone: 6 to 20 digits, no letters, nothing else but spaces, `+`, dashes, brackets, dots and slashes,
+  at most 40 characters. A name, and an email or a phone; sent but wrong, each is refused. On a request that is not
+  a test, a placeholder is refused too: a name that stands for none, a form's label or a test's filler (N/A, null,
+  Test, Your name, `{{customer_name}}`, a link, `audit-fixturex`), an address at a domain no mail reaches (`.invalid`,
+  `.test`, `.localhost`, `.local`, `.internal` and the like) or a no-reply mailbox, a number of one digit over and
+  over or the digits counted up or down (000000, 123456). The documentation names (example.com, example.net,
+  example.org, `.example`) are taken: they are how the guides and the tests name a client. A test item (`x-sandbox:
+  1`) emails nobody, so it may name a made-up client. Judged and stored trimmed, so a retry with other spaces is
+  the same request.
 - **Refusals.** `422 invalid_input`, `details.reason` `client_details`, with `details.missing` (`name`,
   `email_or_phone`), `details.invalid` (`name`, `email`, `phone`) and `fields`; `403 not_allowed`,
   `details.reason` `<kind>_not_offered`, with `details.item_types`; for orders `422 product_missing`,
@@ -48,8 +58,9 @@ The founder's, 15 November 2026:
   early in each create (`requireClient`, `refuseNotOffered`, `checkOrderLines`) and again where every create of a
   person goes (`IdentityCapabilities.create`).
 - **Schemas.** `contact` and its `name` are listed as required in the JSON Schema (the MCP tool list,
-  `/openapi.json`) and read as sent, so every door answers in the same words; no `anyOf`, which some clients cannot
-  take. An order's line names and prices and its total may be left to the catalogue: a customer's order is first
+  `/openapi.json`), with each detail's format and length, and read as sent: nothing about the contact is refused by
+  a schema, so every door answers in the client rule's words; no `anyOf`, which some clients cannot take. The MCP
+  tools' text names each detail's need in full, so a phone is asked for as readily as an email. An order's line names and prices and its total may be left to the catalogue: a customer's order is first
   read with them optional, and what is stored is read again strictly. `order` is offered only with an active
   product priced `fixed`; the setup plan predicts the same.
 - **Tools.** The public MCP lists a create tool only for a kind in `item_types`: `create_order` and
