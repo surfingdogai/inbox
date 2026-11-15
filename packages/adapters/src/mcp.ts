@@ -81,7 +81,7 @@ import {
   stayInstructionsElsewhere,
   takesStays,
 } from "./stays";
-import { registerPublicTradesTools, TRADES_INSTRUCTIONS, takesWork } from "./trades";
+import { registerPublicTradesTools, takesWork, tradesInstructions } from "./trades";
 import { itemTexts, ownerSentence, withUntrusted } from "./untrusted";
 
 /**
@@ -100,6 +100,18 @@ export interface McpDeps {
  */
 const CLIENT_WORDS =
   "Needs your person's name and an email address or a phone number in contact: ask them first, and send only what they agree to give this business. Never make them up or send your own; without them nothing is written.";
+
+/**
+ * How an assistant asks about a product the business does not sell at a fixed price, among the kinds it takes
+ * (ADR-048): never with a tool that is not listed.
+ */
+function askedAbout(takes: ReadonlySet<string>): string {
+  return takes.has("quote_request")
+    ? "asked about with request_quote"
+    : takes.has("message")
+      ? "not ordered here: ask about it with send_message"
+      : "not ordered here";
+}
 
 /** The kinds of request as an agent is told where the business takes them instead. */
 const ELSEWHERE_WORDS: Record<string, string> = {
@@ -124,6 +136,7 @@ export function publicInstructions(
   const takes = new Set(profile.item_types);
   const booking = takes.has("booking");
   const order = takes.has("order");
+  const asked = askedAbout(takes);
   const elsewhere = (profile.doors_elsewhere ?? [])
     .filter((d) => !(d.item_type === "order" && o.menuNamesOrders))
     .map((d) => {
@@ -143,14 +156,15 @@ export function publicInstructions(
     "This is a business's typed inbox. Start with get_business_profile, then list_services or list_products.",
     "Before you send anything new here, ask your person for their name and an email address or a phone number, and send only what they agree to give this business, in contact (name, and email or phone). Never make them up or send your own: without them nothing is written.",
     "This business takes only what get_business_profile lists in item_types; there are no tools here for anything else.",
+    "Send each new request with an idempotency_key you generate and keep: a fresh random UUID for each new request, never one made from the request itself.",
     ...(booking
       ? [
-          "For a booking: check_availability, then create_booking at one of its free times (leave endTime out and it follows the service's length), with an idempotency_key you generate and keep: a fresh random UUID for each new request, never one made from the request itself.",
+          "For a booking: check_availability, then create_booking at one of its free times (leave endTime out and it follows the service's length).",
         ]
       : []),
     ...(order
       ? [
-          "For an order, each line names a product from list_products by productId, with a quantity; leave prices out, and the business prices each line in its currency. A product priced from, as a range or on request is asked about with request_quote.",
+          `For an order, each line names a product from list_products by productId, with a quantity; leave prices out, and the business prices each line in its currency. A product priced from, as a range or on request is ${asked}.`,
         ]
       : []),
     ...elsewhere,
@@ -450,8 +464,8 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
     const instructions = [
       publicInstructions(profile, { menuNamesOrders: menu && ordersAt !== null }),
       ...(property ? [stays ? STAY_INSTRUCTIONS : stayInstructionsElsewhere(staysElsewhere)] : []),
-      ...(work ? [TRADES_INSTRUCTIONS] : []),
-      ...(menu ? [foodInstructions(ordersAt, { orders: takes.has("order") })] : []),
+      ...(work ? [tradesInstructions(takes.has("quote_request"))] : []),
+      ...(menu ? [foodInstructions(ordersAt, { orders: takes.has("order"), bookings: takes.has("booking") })] : []),
       ...(agentPay ? [AGENT_PAY_INSTRUCTIONS] : []),
       ...(stripePay ? [STRIPE_PAY_INSTRUCTIONS] : []),
     ];
@@ -518,8 +532,7 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
       "list_products",
       {
         title: "Products",
-        description:
-          "Orderable products with prices in minor units, each with its barcode (gtin, 14 digits) where it has one and whether it can be had (never a count). A variant names its group and options; price_model says how a price is meant (only fixed is ordered with create_order: from, range and quote are asked about with request_quote); an age-restricted product carries the label to show (ID checked at handover: 18+). ids: read the live price of products a network showed you, before your person agrees; gtin: the products with that barcode, in any of its lengths. The price here is the one that counts.",
+        description: `${takes.has("order") ? "Orderable products" : "Products"} with prices in minor units, each with its barcode (gtin, 14 digits) where it has one and whether it can be had (never a count). A variant names its group and options; price_model says how a price is meant (${takes.has("order") ? `only fixed, in the business's currency, is ordered with create_order: from, range and quote are ${askedAbout(takes)}` : `this business takes no orders here: a product is ${askedAbout(takes)}`}); an age-restricted product carries the label to show (ID checked at handover: 18+). ids: read the live price of products a network showed you, before your person agrees; gtin: the products with that barcode, in any of its lengths. The price here is the one that counts.`,
         inputSchema: listProductsInput,
         annotations: readOnly,
       },
@@ -606,7 +619,7 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
         "request_quote",
         {
           title: "Request a quote",
-          description: `Ask for a price on something custom, or on a service or product priced on request (itemOffered.serviceId or itemOffered.productId). Creates a quote_request item. ${CLIENT_WORDS}`,
+          description: `Ask for a price on something custom, in your person's words (itemOffered.name), or on a service or a product priced from, as a range or on request (itemOffered.serviceId or itemOffered.productId, from list_services or list_products). A budget, if your person gives one, is in the business's currency. Creates a quote_request item. ${CLIENT_WORDS}`,
           inputSchema: requestQuoteInput,
           annotations: writes,
         },
@@ -648,7 +661,7 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
         "create_order",
         {
           title: "Place an order",
-          description: `Order products this business sells at a fixed price, at the business's price: each line names one by productId (or sku) from list_products, with a quantity. Leave price and totalPrice out: the business prices every line, and the total, in its currency. A price you send that is not the business's is refused, unless get_business_profile says price_negotiable (then it is your person's offer); one in another currency always is. A product priced from, as a range or on request is asked about with request_quote. ${CLIENT_WORDS} A priced order binds your person only once they confirmed it: without terms_sha nothing is sent, and you get the summary to show them (confirm.summary, confirm.terms_sha); call again with that terms_sha on their clear yes.`,
+          description: `Order products this business sells at a fixed price, at the business's price: each line names one by productId (or sku) from list_products, with a quantity. Leave price and totalPrice out: the business prices every line, and the total, in its currency. A price you send that is not the business's is refused, unless get_business_profile says price_negotiable (then it is your person's offer); one in another currency always is. A product priced from, as a range or on request is ${askedAbout(takes)}. ${CLIENT_WORDS} A priced order binds your person only once they confirmed it: without terms_sha nothing is sent, and you get the summary to show them (confirm.summary, confirm.terms_sha); call again with that terms_sha on their clear yes.`,
           inputSchema: createOrderInput,
           annotations: writes,
         },
@@ -840,7 +853,16 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
         description: takes.has("message")
           ? "Start a conversation, or reply on an item you made (item_id). To start one, contact needs your person's name and an email address or a phone number: ask them first, and send only what they agree to give this business; never make them up. A reply needs no contact."
           : "Reply on an item you made (item_id). This business takes no new conversations here.",
-        inputSchema: sendMessageInput,
+        // While new messages are off, item_id is said as what it is then: the item to reply on.
+        inputSchema: takes.has("message")
+          ? sendMessageInput
+          : sendMessageInput.extend({
+              item_id: z
+                .string()
+                .min(1)
+                .optional()
+                .describe("The item you made, to reply on: this business takes no new conversations here."),
+            }),
         annotations: writes,
       },
       (args) =>

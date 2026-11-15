@@ -157,7 +157,7 @@ export function registerPublicStayTools(
       {
         title: "Hold an instant room",
         description:
-          "Hold an instant room from check_stay_availability or quote_stay (offer_id) for the property's hold time, at its offer. Needs the guest's name and an email address or a phone number in contact: ask them first; never make them up. Then book_stay with the terms_sha your person confirmed. A room that is not instant is refused: send request_stay instead.",
+          "Hold an instant room from check_stay_availability or quote_stay (offer_id) for the property's hold time, at its offer. Needs the guest's name and an email address or a phone number in contact, and their consent: ask them first, and send only what they agree to give the property; never make them up. Then book_stay with the terms_sha your person confirmed. A room that is not instant is refused: send request_stay instead.",
         inputSchema: I.holdStayInput,
         annotations: writes,
       },
@@ -426,7 +426,7 @@ export function stayPublicRoutes(
       tags: ["stays"],
       summary: "Request a stay",
       description:
-        "The property answers with its own quote. Needs contact: the guest's name, and an email address or a phone number.",
+        "The property answers with its own quote. Needs contact: the guest's name, and an email address or a phone number, as they agreed to give them to the property, and their consent; ask them first, and never make them up (422 invalid_input, details.reason client_details, without them).",
     }),
     validator("json", I.requestStayInput, h),
     async (c) => created(c, await caps.stays.request(c.get("caller"), withIdem(c, c.req.valid("json")))),
@@ -437,7 +437,7 @@ export function stayPublicRoutes(
       tags: ["stays"],
       summary: "Hold an instant room",
       description:
-        "Holds an instant room for the property's hold time, at its offer. Needs contact: the guest's name, and an email address or a phone number.",
+        "Holds an instant room for the property's hold time, at its offer. Needs contact: the guest's name, and an email address or a phone number, as they agreed to give them to the property, and their consent; ask them first, and never make them up (422 invalid_input, details.reason client_details, without them).",
     }),
     validator("json", I.holdStayInput, h),
     async (c) => created(c, await caps.stays.hold(c.get("caller"), withIdem(c, c.req.valid("json")))),

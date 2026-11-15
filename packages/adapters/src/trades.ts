@@ -31,10 +31,23 @@ export async function takesWork(caps: Capabilities): Promise<boolean> {
   return profile.work !== undefined;
 }
 
+const WORK_WORDS =
+  "This business quotes jobs. get_business_profile's work says where it goes, whether it takes emergencies online, and its call-out fee; check_area tells you whether a site is inside where it works (inside, outside, or on_request when it decides).";
+
 export const TRADES_INSTRUCTIONS = [
-  "This business quotes jobs. get_business_profile's work says where it goes, whether it takes emergencies online, and its call-out fee; check_area tells you whether a site is inside where it works (inside, outside, or on_request when it decides).",
+  WORK_WORDS,
   "request_quote takes the job (payload.job: urgency, whether a visit comes first, the site and how to find the way, up to three windows that suit) and photos or plans (attachments: JPEG, PNG, WebP or PDF, at most six of 10 MB; inline as data_base64 up to 4 MB each and 8 MB a call, else by an https url, or an upload_id from POST /v1/uploads). HEIC photos: send them as JPEG. Where a photo was taken is taken out of images; a PDF is kept as it was sent.",
 ].join(" ");
+
+/**
+ * What an agent is told of a trade: how a job is asked for, only while the business takes requests for a price
+ * here (ADR-048); without them, where it works, and that a job is asked about in a message.
+ */
+export function tradesInstructions(quotes: boolean): string {
+  return quotes
+    ? TRADES_INSTRUCTIONS
+    : `${WORK_WORDS} It takes no requests for a price here: ask about a job with send_message.`;
+}
 
 export function registerPublicTradesTools(server: McpServer, caps: Capabilities, _caller: Caller): void {
   server.registerTool(

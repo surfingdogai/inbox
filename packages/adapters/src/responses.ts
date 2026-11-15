@@ -520,7 +520,7 @@ export const businessProfileSchema = profileSchema.extend({
   item_types: z
     .array(z.string())
     .describe(
-      "What this business takes here: message, quote_request, booking, order, refund, stay. An assistant's booking, order, request for a price or stay of any other kind is refused (403 not_allowed, details.reason <kind>_not_offered).",
+      "The kinds this business takes here, of message, quote_request, booking, order, refund and stay. A booking, an order, a request for a price or a stay of a kind not listed is refused (403 not_allowed, details.reason <kind>_not_offered).",
     ),
   price_negotiable: z
     .boolean()

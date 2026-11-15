@@ -34,7 +34,7 @@ const idempotencyKey = z
   .max(200)
   .optional()
   .describe(
-    "Same key + same request = same answer. Required for agents. Make it a fresh random UUID per request: a retry of a create with a random key gets its access token again.",
+    "Same key + same request = same answer. Required for agents. Make it a fresh random UUID per request, never one made from the request itself: a retry of a create with a random key gets its access token again, so a key anyone could work out would give it to them.",
   );
 const paging = { cursor: z.string().max(200).optional(), limit: z.number().int().min(1).max(100).default(50) };
 
@@ -287,7 +287,7 @@ export const sendMessageInput = z.object({
   contact: clientContactSchema
     .optional()
     .describe(
-      "To start a conversation: your person's details, as for any new request (their name, and an email address or a phone number). Leave it out on a reply.",
+      "To start a conversation: your person's details, as they agreed to give them to this business, as for any new request (their name, and an email address or a phone number). Ask them first; never make them up, and never send your own. Leave it out on a reply.",
     ),
   /** Dedupe key of the underlying message, e.g. an email Message-ID. */
   message_id: z.string().min(1).max(998).optional(),

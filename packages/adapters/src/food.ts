@@ -59,17 +59,28 @@ export const FOOD_INSTRUCTIONS = [
  * never told of slots or an order create_order would refuse. One that takes no orders here at all
  * (`orders: false`, ADR-048: nothing on sale at a fixed price) shows its menu and says nothing of ordering.
  */
-export function foodInstructions(ordersAt: string | null, o: { readonly orders?: boolean } = {}): string {
+export function foodInstructions(
+  ordersAt: string | null,
+  o: { readonly orders?: boolean; readonly bookings?: boolean } = {},
+): string {
+  // Tables are spoken of only where bookings are taken here (ADR-048): never a tool that is not listed.
+  const tables = o.bookings === false ? [] : [TABLE_WORDS];
   if (ordersAt) {
     return [
       MENU_WORDS,
       `${ALLERGEN_WORDS}.`,
       `This business takes orders at ${ordersAt}, not here: send your person there to order.`,
-      TABLE_WORDS,
+      ...tables,
     ].join(" ");
   }
-  if (o.orders === false) return [MENU_WORDS, `${ALLERGEN_WORDS}.`, TABLE_WORDS].join(" ");
-  return FOOD_INSTRUCTIONS;
+  if (o.orders === false) return [MENU_WORDS, `${ALLERGEN_WORDS}.`, ...tables].join(" ");
+  return o.bookings === false
+    ? [
+        MENU_WORDS,
+        `${ALLERGEN_WORDS}; an order with such a dish waits for a person at the business.`,
+        ORDER_WORDS,
+      ].join(" ")
+    : FOOD_INSTRUCTIONS;
 }
 
 const sectionsText = (r: Awaited<ReturnType<Capabilities["food"]["getMenu"]>>) =>

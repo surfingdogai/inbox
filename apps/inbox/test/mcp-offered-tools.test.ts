@@ -109,13 +109,35 @@ describe("the public MCP's tools", () => {
     for (const t of ORDER_TOOLS) expect(names).not.toContain(t);
   });
 
+  it("names no tool it does not list: with requests for a price off, nothing sends the assistant to request_quote", async () => {
+    const s = await setup();
+    await aProduct(s.db, { name: "Chain", value: 1850 });
+    expect((await s.ownerCall("PUT", "/v1/owner/settings", { doc: { doors: { quoteRequest: false } } })).status).toBe(
+      200,
+    );
+    const { names, tools, instructions } = await s.server();
+    expect(names).not.toContain("request_quote");
+    expect(names).toContain("create_order");
+    expect(instructions).not.toContain("request_quote");
+    for (const t of tools) expect(t.description ?? "", t.name).not.toContain("request_quote");
+    expect(tools.find((t) => t.name === "create_order")?.description).toContain(
+      "is not ordered here: ask about it with send_message",
+    );
+    // The key every new request is sent with is said whatever the business takes, bookings or not.
+    expect(instructions).toContain("never one made from the request itself");
+  });
+
   it("keeps send_message for replies once the owner switches new messages off", async () => {
     const s = await setup();
     expect((await s.ownerCall("PUT", "/v1/owner/settings", { doc: { doors: { message: false } } })).status).toBe(200);
     const { tools } = await s.server();
-    expect(tools.find((t) => t.name === "send_message")?.description).toBe(
+    const message = tools.find((t) => t.name === "send_message");
+    expect(message?.description).toBe(
       "Reply on an item you made (item_id). This business takes no new conversations here.",
     );
+    // Its item_id says the same, never "omit to start a new conversation".
+    const itemId = (message?.inputSchema as { properties: { item_id: { description?: string } } }).properties.item_id;
+    expect(itemId.description).toBe("The item you made, to reply on: this business takes no new conversations here.");
   });
 
   it("hides the booking tools while bookings are taken elsewhere, and names where in the instructions", async () => {
