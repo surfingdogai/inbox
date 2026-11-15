@@ -40,13 +40,13 @@
           "type": "string",
           "maxLength": 254,
           "pattern": "^[^\\s@<>()\\[\\],;:\"]{1,64}@[^\\s@<>()\\[\\],;:\"]+\\.[^\\s@<>()\\[\\],;:\"]{2,}$",
-          "description": "Your person's email address, which they agreed to give this business for its answer."
+          "description": "Your person's email address, which they agreed to give this business for its answer: one that receives mail, never a no-reply one or one at .invalid, .test or localhost."
         },
         "name": {
           "type": "string",
           "minLength": 1,
           "maxLength": 100,
-          "description": "Your person's name, as they gave it for the business to use. A business's inbox refuses a request without it."
+          "description": "Your person's name, as they gave it for the business to use: with a letter in it and no @, and never a placeholder (N/A, Test, {{name}}). A business's inbox refuses a request without it, or with one that is not a name."
         }
       },
       "required": ["email", "name"],

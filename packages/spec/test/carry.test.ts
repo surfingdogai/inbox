@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import {
   askBusinessInputSchema,
   carryOutputSchema,
@@ -74,10 +75,20 @@ describe("ask_business, request_quote, request_booking", () => {
         { email: "ana@example.com" },
         { email: "ana@example.com", name: "" },
         { email: "ana@example.com", name: "   " },
+        // A name as an inbox takes one: a letter you can see in it, and no @ (ADR-048).
+        { email: "ana@example.com", name: "1234" },
+        { email: "ana@example.com", name: "-" },
+        { email: "ana@example.com", name: "ana@example.com" },
+        { email: "ana@example.com", name: "\u3164" },
       ]) {
         expect(schema.safeParse({ ...ask, contact: nameless }).success, JSON.stringify(nameless)).toBe(false);
       }
     }
+    // request_booking's contact and consent say the name goes too.
+    const booking = JSON.stringify(z.toJSONSchema(requestBookingInputSchema, { io: "input" }));
+    expect(booking).toContain("their name and their email address");
+    expect(booking).toContain("their name and email address for its answer");
+    expect(booking).not.toContain("where the business can answer");
   });
 
   it("answer with the inbox's own item and words, and what the network keeps", () => {

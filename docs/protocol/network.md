@@ -46,9 +46,10 @@ to 0.16 rejects a `get_census` answer of more than 200 rows. Spec 0.17.1 says wh
 of (§4.18): the business's own country's, 14 days in the EU, the EEA, Gibraltar and the UK; an inbox whose business is
 elsewhere leaves it out, and publishes only the return policies its owner wrote. Nothing a 0.17.0 reader reads changes.
 Spec 0.18 makes the person's name required on a carried request (§4.17, `carryContactSchema`): an inbox at 0.18 refuses
-a carried request, and any new request from an assistant, without the person's name and a way to reach them
-(`422 invalid_input`, `details.reason "client_details"`), and the network's answer is refused with the inbox's words.
-A 0.17 network that carries a request with no name gets that refusal back; nothing else a 0.17 reader reads changes.
+a carried request, and any new request from an assistant, without the person's name and a way to reach them, or with
+details that are none (`422 invalid_input`, `details.reason "client_details"`), and the network answers with outcome
+`refused`, in the inbox's words. A 0.17 network that carries a request with no name gets that refusal back; nothing
+else a 0.17 reader reads changes.
 
 A **network** is a service that inboxes report to: it lists businesses, keeps the receipts they
 publish, gives customers a key and passes, and orders the directory by the published rules. Anyone
@@ -1866,8 +1867,10 @@ never a reason to raise a level. A platform's own door type `platform:<id>` uses
 door it read on the business's site to the one the business declares.
 
 **The person.** A request carries the person's name and email address: never a phone number.
-`consent: true` says the person agreed to give the business them for its answer, and nothing is sent
-without it. Their words go as they wrote them, at most 4,000 characters. Nothing the
+`consent: true` says the person agreed to give them to the business for its answer, and nothing is sent
+without it. A name, as an inbox takes one (`carryName`), has a letter in it and no `@`; an inbox also refuses a
+placeholder for one (N/A, Test, `{{name}}`), and an address that receives no mail (at `.invalid`, `.test` or
+`localhost`, or a no-reply mailbox): a network sends the person's own, as they gave them. Their words go as they wrote them, at most 4,000 characters. Nothing the
 person's assistant carries for them (a pass, a key) and nothing about the assistant's platform goes to
 the inbox, and nothing about the person comes back to the platform: the answer has the inbox's item, its
 words and the access token it hands an anonymous creator, never the person's address or the inbox's
