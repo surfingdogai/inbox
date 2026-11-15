@@ -225,16 +225,26 @@ describe("the manifest's carried_requests (ADR-025)", () => {
   it("a request a network says it carried is marked so, and grants nothing more", async () => {
     const db = await freshDb();
     const inbox = createInbox({ db, now: () => NOW });
-    const send = (headers: Record<string, string>, key: string) =>
+    const send = (
+      headers: Record<string, string>,
+      key: string,
+      contact: Record<string, string> = { name: "Ana", email: "ana@example.com" },
+    ) =>
       inbox.app.request(`${ORIGIN}/v1/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Idempotency-Key": key, ...headers },
-        body: JSON.stringify({ body: "Are you open on Saturday?", contact: { email: "ana@example.com" } }),
+        body: JSON.stringify({ body: "Are you open on Saturday?", contact }),
       });
-    const carried = await send(
-      { "Surfing-Dog-Carried": "1", "Surfing-Dog-Carried-For": "a1b2c3d4e5f6a7b8c9d0e1" },
-      "k1",
-    );
+    const network = { "Surfing-Dog-Carried": "1", "Surfing-Dog-Carried-For": "a1b2c3d4e5f6a7b8c9d0e1" };
+    // Carried with an email and no name: refused as any assistant's request is (ADR-048), nothing written.
+    const nameless = await send(network, "k0", { email: "ana@example.com" });
+    expect(nameless.status).toBe(422);
+    expect(await nameless.json()).toMatchObject({
+      code: "invalid_input",
+      details: { reason: "client_details", missing: ["name"] },
+    });
+    expect((await db.client.query({ sql: "SELECT COUNT(*) FROM items", method: "all" })).rows[0]?.[0]).toBe(0);
+    const carried = await send(network, "k1");
     const direct = await send({}, "k2");
     expect([carried.status, direct.status]).toEqual([201, 201]);
     const flags = async (res: Response) => {

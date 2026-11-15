@@ -5,7 +5,7 @@ import { logMailOut } from "@surfingdog/platform";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { STRIPE_LIVE_KEY, STRIPE_TEST_KEY } from "../../../packages/adapters/test/fixtures/payments";
 import { createInbox } from "../src/app";
-import { confirmed, freshDb } from "./harness";
+import { aProduct, confirmed, freshDb } from "./harness";
 import { stripePlatform } from "./pay-platforms";
 
 /**
@@ -99,19 +99,20 @@ async function ready(s: S, key = STRIPE_LIVE_KEY) {
 
 const tokens = new Map<string, string>();
 
-/** A customer's order through the public door, confirmed by its person; accepted by the owner unless asked not to. */
+/**
+ * A customer's order through the public door, for three loaves the bakery sells (ADR-048), confirmed by its
+ * person; accepted by the owner unless asked not to.
+ */
 async function order(s: S, opts: { value?: number; accept?: boolean } = {}) {
   const value = opts.value ?? 18900;
+  const loaf = await aProduct(s.db, { name: "Sourdough loaf", value: value / 3, currency: "NOK" });
   const made = await confirmed(
     (r) => s.inbox.app.request(r),
     new Request(`${BASE}/v1/orders`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        payload: {
-          orderedItem: [{ name: "Sourdough loaf", quantity: 3, price: { value: value / 3, currency: "NOK" } }],
-          totalPrice: { value, currency: "NOK" },
-        },
+        payload: { orderedItem: [{ productId: loaf, quantity: 3 }] },
         contact: { name: "Solveig", email: "solveig@example.com", locale: "en" },
       }),
     }),

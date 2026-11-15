@@ -3,13 +3,14 @@ import { z } from "zod";
 import { filesInputSchema } from "../attachments/index";
 import {
   bookingPayloadSchema,
-  contactSchema,
+  clientContactSchema,
   isoDateTime,
   itemTypeSchema,
+  listedRequired,
   messagePayloadSchema,
   moneySchema,
-  orderLineSchema,
-  orderPayloadSchema,
+  orderRequestLineSchema,
+  orderRequestPayloadSchema,
   quoteRequestPayloadSchema,
   returnLinesSchema,
   returnReasonSchema,
@@ -95,16 +96,19 @@ export const jobInput = jobSchema
     "The job: urgency (emergency, within_24h, this_week, flexible), whether a visit comes first, the site (address, how to find the way, home or business), up to three windows that suit, and budgetMax for a range.",
   );
 
-export const requestQuoteInput = z.object({
-  payload: quoteRequestPayloadSchema.omit({ quote: true, offer: true, attachments: true }).extend({
-    job: jobInput.optional(),
+export const requestQuoteInput = listedRequired(
+  z.object({
+    payload: quoteRequestPayloadSchema.omit({ quote: true, offer: true, attachments: true }).extend({
+      job: jobInput.optional(),
+    }),
+    contact: clientContactSchema.optional(),
+    message: z.string().max(20_000).optional(),
+    attachments: filesInputSchema,
+    idempotency_key: idempotencyKey,
+    ...carried,
   }),
-  contact: contactSchema.optional(),
-  message: z.string().max(20_000).optional(),
-  attachments: filesInputSchema,
-  idempotency_key: idempotencyKey,
-  ...carried,
-});
+  ["contact"],
+);
 
 /**
  * The customer's side of a booking or an order: the business's own fields (a proposal, a payment
@@ -126,73 +130,88 @@ const confirmedTerms = z
  * A booking as a door takes it: the end and the service's name may be left out, and follow from the
  * service (`completeBooking`): the end is the start plus the service's length, the name its own.
  */
-export const createBookingInput = z.object({
-  payload: bookingPayloadSchema
-    .omit({
-      proposed: true,
-      customerStatedPrice: true,
-      offer: true,
-      change: true,
-      paymentRef: true,
-      paidAmount: true,
-      attachments: true,
-      law: true,
-    })
-    .extend({
-      reservationFor: z.object({
-        serviceId: z.string().min(1),
-        name: z.string().min(1).max(200).optional().describe("The service's name. Left out, it is the service's own."),
+export const createBookingInput = listedRequired(
+  z.object({
+    payload: bookingPayloadSchema
+      .omit({
+        proposed: true,
+        customerStatedPrice: true,
+        offer: true,
+        change: true,
+        paymentRef: true,
+        paidAmount: true,
+        attachments: true,
+        law: true,
+      })
+      .extend({
+        reservationFor: z.object({
+          serviceId: z.string().min(1),
+          name: z
+            .string()
+            .min(1)
+            .max(200)
+            .optional()
+            .describe("The service's name. Left out, it is the service's own."),
+        }),
+        endTime: isoDateTime
+          .optional()
+          .describe("When it ends, ISO 8601. Left out, it is startTime plus the service's length (durationMin)."),
       }),
-      endTime: isoDateTime
-        .optional()
-        .describe("When it ends, ISO 8601. Left out, it is startTime plus the service's length (durationMin)."),
-    }),
-  contact: contactSchema.optional(),
-  message: z.string().max(20_000).optional(),
-  attachments: filesInputSchema,
-  /**
-   * A site visit for a request for a price this customer made (ADR-039 §4): the request's id, and its
-   * access token when the request was made without an account. The visit is tied to it once booked.
-   */
-  visit_for: z
-    .object({ item_id: z.string().min(1).max(64), access_token: accessToken })
-    .optional()
-    .describe("Book this as the site visit for a request for a price you made: its item_id (and access_token)."),
-  terms_sha: confirmedTerms,
-  idempotency_key: idempotencyKey,
-  ...carried,
-});
+    contact: clientContactSchema.optional(),
+    message: z.string().max(20_000).optional(),
+    attachments: filesInputSchema,
+    /**
+     * A site visit for a request for a price this customer made (ADR-039 §4): the request's id, and its
+     * access token when the request was made without an account. The visit is tied to it once booked.
+     */
+    visit_for: z
+      .object({ item_id: z.string().min(1).max(64), access_token: accessToken })
+      .optional()
+      .describe("Book this as the site visit for a request for a price you made: its item_id (and access_token)."),
+    terms_sha: confirmedTerms,
+    idempotency_key: idempotencyKey,
+    ...carried,
+  }),
+  ["contact"],
+);
 
-export const createOrderInput = z.object({
-  payload: orderPayloadSchema
-    .omit({
-      paymentRef: true,
-      paymentUrl: true,
-      paidAmount: true,
-      customerStatedPrice: true,
-      proposed: true,
-      offer: true,
-      change: true,
-      fulfilledAt: true,
-      deliveredAt: true,
-      attachments: true,
-      schedule: true,
-      law: true,
-      returnTerms: true,
-    })
-    .extend({
-      orderedItem: z
-        .array(orderLineSchema.omit({ customerStatedPrice: true }))
-        .min(1)
-        .max(200),
-    }),
-  contact: contactSchema.optional(),
-  message: z.string().max(20_000).optional(),
-  attachments: filesInputSchema,
-  terms_sha: confirmedTerms,
-  idempotency_key: idempotencyKey,
-  ...carried,
-});
+/**
+ * An order as a door takes it (ADR-048): each line names one of the business's products, by `productId` or
+ * `sku`, with a quantity; its name and price, and the order's total, may be left to the catalogue.
+ */
+export const createOrderInput = listedRequired(
+  z.object({
+    payload: orderRequestPayloadSchema
+      .omit({
+        paymentRef: true,
+        paymentUrl: true,
+        paidAmount: true,
+        customerStatedPrice: true,
+        proposed: true,
+        offer: true,
+        change: true,
+        fulfilledAt: true,
+        deliveredAt: true,
+        attachments: true,
+        schedule: true,
+        law: true,
+        returnTerms: true,
+      })
+      .extend({
+        orderedItem: z
+          .array(orderRequestLineSchema.omit({ customerStatedPrice: true, listPrice: true }))
+          .min(1)
+          .max(200),
+      }),
+    contact: clientContactSchema.optional(),
+    message: z.string().max(20_000).optional(),
+    attachments: filesInputSchema,
+    terms_sha: confirmedTerms,
+    idempotency_key: idempotencyKey,
+    ...carried,
+  }),
+  ["contact"],
+);
 
 export const getItemStatusInput = z.object({
   item_id: z
@@ -265,7 +284,11 @@ export const sendMessageInput = z.object({
   item_id: z.string().min(1).optional().describe("Reply on an existing item; omit to start a new conversation."),
   subject: z.string().max(500).optional(),
   body: z.string().min(1).max(20_000),
-  contact: contactSchema.optional(),
+  contact: clientContactSchema
+    .optional()
+    .describe(
+      "To start a conversation: your person's details, as for any new request (their name, and an email address or a phone number). Leave it out on a reply.",
+    ),
   /** Dedupe key of the underlying message, e.g. an email Message-ID. */
   message_id: z.string().min(1).max(998).optional(),
   access_token: accessToken,

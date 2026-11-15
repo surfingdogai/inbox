@@ -34,7 +34,7 @@ import { servicePriceText } from "../util/money";
 import { type Caller, isCustomer, nowOf } from "../write/caller";
 import { fromZod, WriteError } from "../write/errors";
 import { type Closure, readClosures } from "./closures";
-import { type DoorSwitches, STAY_ROOM_OFFERED_SQL } from "./directory";
+import { type DoorSwitches, FIXED_PRODUCT_SQL, STAY_ROOM_OFFERED_SQL } from "./directory";
 import type { Capabilities } from "./service";
 import { hasAmount, PRESET_NAMES, servicePriceKey, validTimezone } from "./setup";
 import {
@@ -687,6 +687,7 @@ export async function applySetupPlan(
         own: state.ownHours,
         hours: hoursAfter,
         products: state.products,
+        fixedProducts: state.fixedProducts,
         elsewhere: away,
         doors: doorsAfter,
         stays: state.stays,
@@ -737,19 +738,22 @@ interface State {
   readonly closures: readonly Closure[];
   readonly rules: readonly PlanRule[];
   readonly products: boolean;
+  /** An active product at a fixed price: what an order names (ADR-048). */
+  readonly fixedProducts: boolean;
   readonly settings: Awaited<ReturnType<typeof readSettings>>;
   /** A place to stay with a room to offer. */
   readonly stays: boolean;
 }
 
 async function readState(caps: Capabilities, db: Db, caller: Caller): Promise<State> {
-  const [profile, services, open, closures, rules, products, settings, rooms] = await Promise.all([
+  const [profile, services, open, closures, rules, products, fixedProducts, settings, rooms] = await Promise.all([
     caps.setup.getProfile(caller),
     caps.setup.listServices(caller),
     db.client.query({ sql: "SELECT service_id, weekly FROM availability_rules WHERE kind = 'open'", method: "all" }),
     readClosures(db),
     caps.setup.listRules(caller),
     db.client.query({ sql: "SELECT 1 FROM products WHERE active = 1 LIMIT 1", method: "all" }),
+    db.client.query({ sql: FIXED_PRODUCT_SQL, params: [], method: "all" }),
     readSettings(db),
     db.client.query({ sql: STAY_ROOM_OFFERED_SQL, params: [], method: "all" }),
   ]);
@@ -767,6 +771,7 @@ async function readState(caps: Capabilities, db: Db, caller: Caller): Promise<St
     closures,
     rules: rules.map((r) => ({ name: r.name, priority: r.priority, enabled: r.enabled, definition: r.definition })),
     products: products.rows.length > 0,
+    fixedProducts: fixedProducts.rows.length > 0,
     settings,
     stays: rooms.rows.length > 0,
   };
@@ -829,17 +834,17 @@ function bookable(s: DoorState): boolean {
 /**
  * The doors on once a plan is applied, read as `offeredItemTypes` reads the inbox: a message always,
  * a booking with a service booked at a time that has hours, a quote with a service or a product, an order with a
- * product, a refund with something paid; a booking or an order taken somewhere else, never. The
+ * product at a fixed price, a refund with something paid; a booking or an order taken somewhere else, never. The
  * tests hold the two to the same answer.
  */
-function predictDoors(s: DoorState & { readonly products: boolean }): ItemType[] {
+function predictDoors(s: DoorState & { readonly products: boolean; readonly fixedProducts: boolean }): ItemType[] {
   const active = s.services.filter((svc) => svc.active);
   const priced = active.some((svc) => {
     const model = (svc.price as { model?: unknown } | null)?.model;
     return model === "fixed" || model === "from";
   });
   const booking = !s.elsewhere.has("booking") && bookable(s);
-  const order = !s.elsewhere.has("order") && s.products;
+  const order = !s.elsewhere.has("order") && s.fixedProducts;
   const on = new Set<ItemType>();
   if (s.doors.message !== false) on.add("message");
   if (booking) on.add("booking");
@@ -877,7 +882,8 @@ function whyShut(door: ItemType, s: DoorState): string {
     return "Booking turns on once a service on offer has opening hours.";
   }
   if (door === "quote_request") return "Asking for a price turns on once there is a service or a product.";
-  if (door === "order") return "Orders turn on once there is a product on offer, which you add in the app.";
+  if (door === "order")
+    return "Orders turn on once there is a product with a fixed price on offer, which you add in the app.";
   if (door === "refund") return "Refunds turn on once something is sold with a price.";
   if (door === "stay") return "Stays turn on once your place has a room to offer, in the app's Property settings.";
   return "Messages are always on.";

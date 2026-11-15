@@ -61,16 +61,20 @@ export const FOOD_INSTRUCTIONS = [
 /**
  * What an agent is told of the menu doors. A business that takes its orders on its own site
  * (`settings.doorsElsewhere`, ADR-035) still shows its menu here, and the agent is sent there to order:
- * never told of slots or an order create_order would refuse.
+ * never told of slots or an order create_order would refuse. One that takes no orders here at all
+ * (`orders: false`, ADR-048: nothing on sale at a fixed price) shows its menu and says nothing of ordering.
  */
-export function foodInstructions(ordersAt: string | null): string {
-  if (!ordersAt) return FOOD_INSTRUCTIONS;
-  return [
-    MENU_WORDS,
-    `${ALLERGEN_WORDS}.`,
-    `This business takes orders at ${ordersAt}, not here: send your person there to order.`,
-    TABLE_WORDS,
-  ].join(" ");
+export function foodInstructions(ordersAt: string | null, o: { readonly orders?: boolean } = {}): string {
+  if (ordersAt) {
+    return [
+      MENU_WORDS,
+      `${ALLERGEN_WORDS}.`,
+      `This business takes orders at ${ordersAt}, not here: send your person there to order.`,
+      TABLE_WORDS,
+    ].join(" ");
+  }
+  if (o.orders === false) return [MENU_WORDS, `${ALLERGEN_WORDS}.`, TABLE_WORDS].join(" ");
+  return FOOD_INSTRUCTIONS;
 }
 
 const sectionsText = (r: Awaited<ReturnType<Capabilities["food"]["getMenu"]>>) =>
@@ -84,7 +88,7 @@ export function registerPublicFoodTools(
   server: McpServer,
   caps: Capabilities,
   caller: Caller,
-  opts: { readonly ordersAt?: string | null } = {},
+  opts: { readonly ordersAt?: string | null; readonly orders?: boolean } = {},
 ): void {
   server.registerTool(
     "get_menu",
@@ -104,8 +108,9 @@ export function registerPublicFoodTools(
       }
     },
   );
-  // Orders taken on the business's own site: no slot is offered here for one (foodInstructions).
-  if (opts.ordersAt) return;
+  // Orders taken on the business's own site, or none taken here (ADR-048): no slot is offered for one
+  // (foodInstructions).
+  if (opts.ordersAt || opts.orders === false) return;
   server.registerTool(
     "list_order_slots",
     {

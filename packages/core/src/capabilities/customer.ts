@@ -57,8 +57,8 @@ import {
   type Item,
   type Money,
   type PayloadOf,
-  payloadSchemas,
   type ReturnTerms,
+  requestSchemaOf,
 } from "../domain/types";
 import { collectCarried } from "../identity/carried";
 import { localStanding } from "../identity/context";
@@ -459,7 +459,8 @@ export class CustomerDoors {
       return { confirmed: input.terms_sha !== undefined };
     const settings = await readSettings(this.db);
     if (settings.commerce.customers === "businesses") return no;
-    const parsed = payloadSchemas[type].safeParse(input.payload);
+    // Read as the request may send it: an order's prices left to the catalogue still bind once priced (ADR-048).
+    const parsed = requestSchemaOf(type, true).safeParse(input.payload);
     // The create says what is wrong with it, in its own words.
     if (!parsed.success) return no;
     const now = nowOf(caller);

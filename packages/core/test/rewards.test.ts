@@ -18,7 +18,7 @@ import { NO_CUSTOMER, NO_PERSON } from "../src/rules/evaluate";
 import { MIGRATIONS } from "../src/schema/migrations.generated";
 import { business, products, services } from "../src/schema/tables";
 import { type Caller, WriteError } from "../src/write/index";
-import { confirming, makeClient, openWeekdays, resetTables } from "./harness";
+import { confirming, makeClient, openWeekdays, resetTables, withClient } from "./harness";
 
 /**
  * Rewarding good customers (ADR-018 §4, Q3): a better price the owner's own rules give a customer whose
@@ -92,7 +92,7 @@ async function setup() {
     { id: chain, sku: "CH-9", name: "Chain", price: EUR(1_850), createdAt: T0, updatedAt: T0 },
     { id: saddle, sku: "SD-1", name: "Saddle", price: EUR(9_999), createdAt: T0, updatedAt: T0 },
   ]);
-  const raw = new Capabilities(db);
+  const raw = withClient(new Capabilities(db));
   const caps = confirming(new Capabilities(db));
   let hour = 8;
   const slot = () => {

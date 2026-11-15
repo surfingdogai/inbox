@@ -17,7 +17,11 @@ export interface ProbeResult {
 
 /** A documentation address (RFC 5737): never a real client, and a rate-limit bucket of its own. */
 const PROBE_ADDRESS = "192.0.2.10";
-const CONTACT = { name: "Test" };
+/**
+ * The client a test request names (ADR-048: every new request carries its person's name and a way to reach
+ * them). A documentation address: a test item emails nobody.
+ */
+const CONTACT = { name: "Door test", email: "door-test@example.com" };
 
 export async function probeDoors(inbox: Inbox, origin: string, doors: readonly string[]): Promise<ProbeResult[]> {
   const call = async (method: string, path: string, body?: unknown): Promise<Response> =>

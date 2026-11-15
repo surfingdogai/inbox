@@ -9,6 +9,7 @@ import { readSettings } from "../settings/schema";
 import { drawFormKey, readFormKey, trapNameOf, trapRoom } from "../spam/formkey";
 import type { ScreenInput } from "../spam/types";
 import type { Caller } from "../write/caller";
+import { clientEmail, clientName } from "../write/client";
 import { WriteError } from "../write/errors";
 import type { Capabilities } from "./service";
 
@@ -41,7 +42,6 @@ const NAME_MAX = 200;
 const EMAIL_MAX = 254;
 const TEXT_MAX = 5_000;
 const WEEK = 7 * 86_400_000;
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** The services a visitor can book, as the business lists them (at most fifty). */
 async function servicesOf(caps: Capabilities): Promise<readonly Service[]> {
@@ -375,13 +375,18 @@ function visitor(lang: CustomerLang, key: string, now: number): Caller {
   };
 }
 
-/** The person's name and address, or what is wrong with them. */
+/**
+ * The person's name and address, or what is wrong with them: judged as every door judges a client's
+ * details (ADR-048), a name with a letter in it and an address the business can write to. The page asks
+ * for an email, since it has no phone field.
+ */
 function person(lang: CustomerLang, form: FrontForm): { name: string; email: string } | { error: string } {
   const f = frontCopy(lang);
-  const name = (form.name ?? "").slice(0, NAME_MAX);
-  const email = (form.email ?? "").slice(0, EMAIL_MAX);
-  if (!name || !email) return { error: f.missing };
-  if (!EMAIL.test(email)) return { error: f.badEmail };
+  const name = clientName((form.name ?? "").slice(0, NAME_MAX));
+  const raw = (form.email ?? "").slice(0, EMAIL_MAX).trim();
+  if (!name || !raw) return { error: f.missing };
+  const email = clientEmail(raw);
+  if (!email) return { error: f.badEmail };
   return { name, email };
 }
 

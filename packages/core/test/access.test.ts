@@ -10,7 +10,7 @@ import { oauthClients, oauthTokens } from "../src/schema/tables";
 import { createSecretBox } from "../src/secrets/box";
 import type { Caller, Principal } from "../src/write/index";
 import { once, pruneIdempotencyKeys, withIdempotencyKey } from "../src/write/index";
-import { makeClient, openWeekdays, resetTables } from "./harness";
+import { makeClient, openWeekdays, resetTables, withClient } from "./harness";
 
 /**
  * Keys, scopes, idempotency and attribution at the core (ADR-004; scopes refused out of the box). The
@@ -71,7 +71,7 @@ async function setup(): Promise<{ db: Db; caps: Capabilities }> {
   await runMigrations(db.client, MIGRATIONS);
   await resetTables(db.client);
   await openWeekdays(db);
-  return { db, caps: new Capabilities(db, createSecretBox([KEY])) };
+  return { db, caps: withClient(new Capabilities(db, createSecretBox([KEY]))) };
 }
 
 /** The settings row as an inbox from before this release left it: a document, or none at all. */

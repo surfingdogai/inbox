@@ -221,15 +221,9 @@ describe("get_menu and list_order_slots over MCP, and an order for a time", () =
     const start = slots.structuredContent.slots[0]?.start;
     const { summary, item } = await order(s, {
       orderedItem: [
-        {
-          productId: id,
-          name: "Chicken",
-          quantity: 1,
-          price: { value: 19000, currency: "KRW" },
-          options: [{ groupId: "spice", choiceId: "hot" }],
-        },
+        // The dish and how many, with its choices: the menu prices them (ADR-048).
+        { productId: id, quantity: 1, options: [{ groupId: "spice", choiceId: "hot" }] },
       ],
-      totalPrice: { value: 19000, currency: "KRW" },
       fulfil: { method: "delivery", slot: { start } },
       shippingAddress: {
         streetAddress: "Haeundae-ro 1",
@@ -396,16 +390,7 @@ describe("the kitchen's own tills", () => {
     );
     const start = await slot(s, "America/Mexico_City");
     const { item } = await order(s, {
-      orderedItem: [
-        {
-          productId: pizza?.product.id,
-          name: "Pizza",
-          quantity: 1,
-          price: { value: 19900, currency: "MXN" },
-          options: [{ groupId: "g1", choiceId: "c1" }],
-        },
-      ],
-      totalPrice: { value: 23400, currency: "MXN" },
+      orderedItem: [{ productId: pizza?.product.id, quantity: 1, options: [{ groupId: "g1", choiceId: "c1" }] }],
       fulfil: { method: "pickup", slot: { start } },
     });
     await s.call("POST", `/v1/owner/items/${item.id}/transitions`, { event: "accept" }, s.owner);

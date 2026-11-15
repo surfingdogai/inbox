@@ -8,7 +8,7 @@ import { createRunner } from "../src/jobs/index";
 import { MIGRATIONS } from "../src/schema/migrations.generated";
 import { availabilityRules, services } from "../src/schema/tables";
 import { createSecretBox } from "../src/secrets/box";
-import type { Caller } from "../src/write/index";
+import { type Caller, createItem } from "../src/write/index";
 import { confirming, makeClient, resetTables } from "./harness";
 
 /**
@@ -121,7 +121,10 @@ async function setup() {
     contact,
   });
   const messageId = (message as { view: { item: { id: string } } }).view.item.id;
-  const order = await caps.createOrder(customer(T0 + 4 * MIN), {
+  // A line naming no product, as the business's own records hold one (an assistant names only what it
+  // sells, ADR-048): its words are hers to erase as much as the address.
+  const order = await createItem(db, customer(T0 + 4 * MIN), {
+    type: "order",
     payload: {
       orderedItem: [{ name: "Gift card", quantity: 1, price: { value: 3_000, currency: "EUR" } }],
       totalPrice: { value: 3_000, currency: "EUR" },

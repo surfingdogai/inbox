@@ -10,7 +10,7 @@ import { ensureLifecycleSweep, LIFECYCLE_SWEEP_KIND, lifecycleSweepHandler } fro
 import { MIGRATIONS } from "../src/schema/migrations.generated";
 import { business, items, outboundMail, products, returnPolicies, services } from "../src/schema/tables";
 import { createSecretBox } from "../src/secrets/box";
-import { type Caller, rowToItem, transitionItem, WriteError } from "../src/write/index";
+import { type Caller, createItem, rowToItem, transitionItem, WriteError } from "../src/write/index";
 import { makeClient, openAllWeek, resetTables } from "./harness";
 
 /**
@@ -149,15 +149,10 @@ async function refused(p: Promise<unknown>): Promise<WriteError> {
 }
 
 const contact = { name: "Rita", email: "rita@example.com", locale: "en" };
-const orderOf = (s: Setup, lines: readonly { productId: string; quantity?: number }[]) => ({
+/** An order as an assistant sends it (ADR-048): the products and how many; the catalogue names and prices them. */
+const orderOf = (_s: Setup, lines: readonly { productId: string; quantity?: number }[]) => ({
   payload: {
-    orderedItem: lines.map((l) => ({
-      productId: l.productId,
-      name: "x",
-      quantity: l.quantity ?? 1,
-      price: s.money(1),
-    })),
-    totalPrice: s.money(1),
+    orderedItem: lines.map((l) => ({ productId: l.productId, quantity: l.quantity ?? 1 })),
   },
   contact,
 });
@@ -227,9 +222,14 @@ async function changeOfMind(
 }
 
 describe("an order the business prices later takes the law of when it becomes a contract", () => {
-  /** An order for a line the business must price: no confirm step, nothing told before the business's offer. */
+  /**
+   * An order for a line the business must price: no confirm step, nothing told before the business's offer. An
+   * assistant names only what the business sells (ADR-048), so it is written as the business's own records hold
+   * one, a customer's order for a line naming no product.
+   */
   async function unpriced(s: Setup) {
-    const made = await s.caps.createOrder(anon(), {
+    const made = await createItem(s.db, anon(), {
+      type: "order",
       payload: {
         orderedItem: [{ name: "Custom frame", quantity: 1, price: s.money(5000) }],
         totalPrice: s.money(5000),

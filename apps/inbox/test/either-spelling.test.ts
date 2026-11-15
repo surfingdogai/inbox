@@ -84,7 +84,10 @@ describe("either spelling, over REST", () => {
     const res = await app.request(
       post(
         "/v1/bookings",
-        { payload: { reservationFor: { service_id: svc }, startTime: START }, contact: { email: "rita@example.com" } },
+        {
+          payload: { reservationFor: { service_id: svc }, startTime: START },
+          contact: { name: "Rita", email: "rita@example.com" },
+        },
         { "idempotency-key": "first-touch-1" },
       ),
     );
@@ -112,7 +115,11 @@ describe("either spelling, over REST", () => {
     const key = crypto.randomUUID();
     const sent = { reservationFor: { serviceId: svc }, startTime: START };
     const first = await app.request(
-      post("/v1/bookings", { payload: sent, contact: { email: "rita@example.com" } }, { "idempotency-key": key }),
+      post(
+        "/v1/bookings",
+        { payload: sent, contact: { name: "Rita", email: "rita@example.com" } },
+        { "idempotency-key": key },
+      ),
     );
     expect(first.status).toBe(201);
     const again = await app.request(
@@ -120,7 +127,7 @@ describe("either spelling, over REST", () => {
         "/v1/bookings",
         {
           payload: { ...sent, reservationFor: { serviceId: svc, name: "Full service" }, endTime: END },
-          contact: { email: "rita@example.com" },
+          contact: { name: "Rita", email: "rita@example.com" },
         },
         { "idempotency-key": key },
       ),
@@ -136,7 +143,7 @@ describe("either spelling, over REST", () => {
     const res = await app.request(
       post("/v1/bookings", {
         payload: { reservationFor: { serviceId: svc, name: "Service" }, startTime: START, endTime: end },
-        contact: { email: "rita@example.com" },
+        contact: { name: "Rita", email: "rita@example.com" },
       }),
     );
     expect(res.status).toBe(201);
@@ -170,7 +177,7 @@ describe("either spelling, over MCP", () => {
       name: "create_booking",
       arguments: {
         payload: { reservationFor: { serviceId: svc }, startTime: START },
-        contact: { email: "rita@example.com" },
+        contact: { name: "Rita", email: "rita@example.com" },
         idempotency_key: "first-touch-mcp",
       },
     });

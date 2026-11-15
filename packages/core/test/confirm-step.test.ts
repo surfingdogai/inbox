@@ -7,7 +7,7 @@ import { offerRows } from "../src/negotiation/offers";
 import { MIGRATIONS } from "../src/schema/migrations.generated";
 import { business, idempotencyKeys, items, products, services } from "../src/schema/tables";
 import { type Caller, WriteError, withIdempotencyKey } from "../src/write/index";
-import { makeClient, openAllWeek, resetTables } from "./harness";
+import { makeClient, openAllWeek, resetTables, withClient } from "./harness";
 
 /**
  * The confirm step (ADR-018 §5; CRD art. 8(2)): a consumer's booking or order that carries a price
@@ -78,7 +78,7 @@ async function setup(doc: Record<string, unknown> = {}) {
       updatedAt: T0,
     },
   ]);
-  const caps = new Capabilities(db);
+  const caps = withClient(new Capabilities(db));
   await caps.updateSettings(owner, {
     doc: {
       business: { name: "Oficina Maré" },
@@ -158,10 +158,9 @@ describe("the confirm step before a priced request binds", () => {
       s.caps.createOrder(agent(), {
         payload: {
           orderedItem: [
-            { productId: s.chain, name: "Chain", quantity: 2, price: EUR(1) },
-            { productId: s.cheese, name: "Cheese", quantity: 1, price: EUR(1) },
+            { productId: s.chain, quantity: 2 },
+            { productId: s.cheese, quantity: 1 },
           ],
-          totalPrice: EUR(1),
         },
       }),
     );
@@ -196,14 +195,17 @@ describe("the confirm step before a priced request binds", () => {
     expect(request?.binding).toBe(false);
 
     const s = await setup();
-    // A line naming nothing of ours: a person prices it first, and the confirm step comes with ours.
-    await s.caps.createOrder(agent(), {
-      payload: { orderedItem: [{ name: "Custom frame", quantity: 1, price: EUR(20_000) }], totalPrice: EUR(20_000) },
-    });
+    // A line naming nothing of ours is no order an assistant sends (ADR-048): refused before any summary.
+    const unnamed = await refused(
+      s.caps.createOrder(agent(), {
+        payload: { orderedItem: [{ name: "Custom frame", quantity: 1, price: EUR(20_000) }], totalPrice: EUR(20_000) },
+      }),
+    );
+    expect(unnamed.details?.reason).toBe("product_missing");
     await s.caps.createBooking(agent(), {
       payload: { ...bookingOf(s.free), reservationFor: { serviceId: s.free, name: "Check-up" } },
     });
-    expect(await s.db.orm.select().from(items)).toHaveLength(2);
+    expect(await s.db.orm.select().from(items)).toHaveLength(1);
   });
 
   it("is the customer's own: the business writing a request down for them is not asked", async () => {

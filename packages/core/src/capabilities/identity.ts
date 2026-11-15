@@ -4,7 +4,7 @@ import { copyFor, vars } from "../customer/copy";
 import { customerHtmlPart } from "../customer/html";
 import { type CustomerLang, customerLang } from "../customer/lang";
 import type { Db } from "../db";
-import { payloadSchemas } from "../domain/types";
+import { payloadSchemas, requestSchemaOf } from "../domain/types";
 import { collectCarried } from "../identity/carried";
 import { checkCode, createCode, type VerifyTarget } from "../identity/codes";
 import { emailOf, maskEmail, rootParty } from "../identity/contacts";
@@ -31,6 +31,7 @@ import type { SecretBox } from "../secrets/box";
 import { readSettings, type Settings } from "../settings/schema";
 import type { Door } from "../spam/types";
 import { type Caller, isCustomer, nowOf, type TrustTier } from "../write/caller";
+import { requireClient } from "../write/client";
 import { findIdempotent, threadEntryStatement } from "../write/common";
 import { ACKNOWLEDGED, type CreateInput, type CreateResult, type CreateScreener, createItem } from "../write/create";
 import { WriteError } from "../write/errors";
@@ -94,9 +95,16 @@ export class IdentityCapabilities {
       const replayed = await createItem(this.db, caller, input, { spam: this.spam });
       return { ...replayed, identity: await this.answer(replayed.view.item.id, {}, retryAudience(caller, replayed)) };
     }
+    // Every new request of an assistant's carries its person's name and a way to reach them (ADR-048):
+    // whichever door it came through, nothing is presented, asked or written without them.
+    requireClient(caller, input.contact, input.type);
     // Nothing is asked of a network for a request the create would refuse anyway, and nothing at
     // all for a test item: it emails nobody and contacts no network (the founder, 23 September 2026).
-    const valid = payloadSchemas[input.type]?.safeParse(input.payload).success === true && !hasStarted(input, now);
+    // A customer's order is read as its request may send it, its prices left to the catalogue.
+    const valid =
+      payloadSchemas[input.type] !== undefined &&
+      requestSchemaOf(input.type, isCustomer(caller)).safeParse(input.payload).success &&
+      !hasStarted(input, now);
     const test = caller.sandbox || input.flags?.sandbox === true;
     // A customer who asked the business not to use booking networks (the founder, 23 September 2026): no
     // network is asked anything about them, and a pass they carry is recognised here, from its hash.

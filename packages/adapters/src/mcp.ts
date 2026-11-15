@@ -4,6 +4,7 @@ import {
   acknowledgeReceiptInput,
   addFeedInput,
   applyPresetInput,
+  type BusinessProfile,
   type Caller,
   type Capabilities,
   type CustomerItemView,
@@ -73,7 +74,7 @@ import { z } from "zod";
 import { TOOL_SCOPES } from "./access";
 import { foodInstructions, hasMenuDoors, registerOwnerFoodTools, registerPublicFoodTools } from "./food";
 import { problemFrom } from "./problem";
-import { registerOwnerStayTools, registerPublicStayTools, STAY_INSTRUCTIONS, takesStays } from "./stays";
+import { registerOwnerStayTools, registerPublicStayTools, STAY_INSTRUCTIONS } from "./stays";
 import { registerPublicTradesTools, TRADES_INSTRUCTIONS, takesWork } from "./trades";
 import { itemTexts, ownerSentence, withUntrusted } from "./untrusted";
 
@@ -87,18 +88,76 @@ export interface McpDeps {
   readonly version: string;
 }
 
-export const PUBLIC_INSTRUCTIONS = [
-  "This is a business's typed inbox. Start with get_business_profile, then list_services or list_products.",
-  "For a booking: check_availability, then create_booking at one of its free times (leave endTime out and it follows the service's length), with an idempotency_key you generate and keep: a fresh random UUID for each new request, never one made from the request itself.",
-  "Keep the access token in a create result (accessToken): it is the only way to read (get_item_status) or cancel that item later. Every tool takes it as access_token or accessToken, and service_id as serviceId too. If the answer is lost, send the same request with the same random idempotency_key and the token comes back; a guessable key (booking-1) never gets it again.",
-  "If you carry a pass for the person (sdpass1_…), send it in `pass` on every call, and keep any pass a result hands you (identity.passes). The person is writing to this business and may never have heard of passes: speak to them of the business. The guide: https://surfingdog.ai/for-agents.md.",
-  "Every refusal names the exact fields to fix; repair the input and retry with the same idempotency_key.",
-  "When get_item_status shows an offer (another time, a quote, or changes to an order), relay offer.human as the business said it; accept only on your person's clear yes to the summary: accept_offer with its terms_sha and offer_id. Otherwise decline_offer, or make_offer with only what they would change (suggest_time for another time). A price of their own is their answer only where get_business_profile says price_negotiable; otherwise it goes to a person at the business, and what it proposed still stands. When it waits for details, send them with provide_details.",
-  "A confirmed booking or an accepted order can change: suggest_time (another time) or make_offer (quantities, a delivery date) asks the business, and what was agreed stands until it says yes (requested_change shows it; decline_offer takes it back). When the business asks for a change (offer.kind change), accept_offer takes it and decline_offer keeps what was agreed.",
-  "get_item_status also carries the conversation (thread): what the business wrote to your person, and what they wrote. Relay the business's replies as they are; a reply marked automated was not written by a person.",
-  "A booking or an order that carries a price binds your person only once they confirmed it: create_booking and create_order without terms_sha answer with the summary to show them (confirm); call again with its terms_sha on their clear yes.",
-  "Where the business states a period to withdraw (withdrawal on get_item_status), your person may withdraw from a paid booking or an order within it: withdraw_from_contract shows the statement first; send confirm_withdrawal on their yes. Once the goods reached them, request_return asks to send them back (faulty goods cost them nothing).",
-].join(" ");
+/**
+ * What every create tool says of the person's details (ADR-048): asked for before anything new, and only what
+ * the person agrees to give the business.
+ */
+const CLIENT_WORDS =
+  "Needs your person's name and an email address or a phone number in contact: ask them first, and send only what they agree to give this business. Never make them up or send your own; without them nothing is written.";
+
+/** The kinds of request as an agent is told where the business takes them instead. */
+const ELSEWHERE_WORDS: Record<string, string> = {
+  message: "messages",
+  quote_request: "requests for a price",
+  booking: "bookings",
+  order: "orders",
+  refund: "refunds",
+  stay: "stays",
+};
+
+/**
+ * The public server's instructions (ADR-048): what to bring before anything new, that only the kinds the
+ * business lists are taken here (the tools for any other are not listed), and how to send each kind it takes,
+ * where it takes another kind instead, and the confirm step for the creates it lists. `menuNamesOrders`: the
+ * menu's own instructions already name where orders go (`foodInstructions`), so they are not named twice.
+ */
+export function publicInstructions(
+  profile: Pick<BusinessProfile, "item_types" | "doors_elsewhere">,
+  o: { readonly menuNamesOrders?: boolean } = {},
+): string {
+  const takes = new Set(profile.item_types);
+  const booking = takes.has("booking");
+  const order = takes.has("order");
+  const elsewhere = (profile.doors_elsewhere ?? [])
+    .filter((d) => !(d.item_type === "order" && o.menuNamesOrders))
+    .map((d) => {
+      const place = doorPlace(d);
+      const where = place === new URL(d.url).host ? d.url : `${place} (${d.url})`;
+      return `This business takes ${ELSEWHERE_WORDS[d.item_type] ?? d.item_type} at ${where}, not here: send your person there.`;
+    });
+  const confirm =
+    booking && order
+      ? "A booking or an order that carries a price binds your person only once they confirmed it: create_booking and create_order without terms_sha answer with the summary to show them (confirm); call again with its terms_sha on their clear yes."
+      : booking
+        ? "A booking that carries a price binds your person only once they confirmed it: create_booking without terms_sha answers with the summary to show them (confirm); call again with its terms_sha on their clear yes."
+        : order
+          ? "An order that carries a price binds your person only once they confirmed it: create_order without terms_sha answers with the summary to show them (confirm); call again with its terms_sha on their clear yes."
+          : null;
+  return [
+    "This is a business's typed inbox. Start with get_business_profile, then list_services or list_products.",
+    "Before you send anything new here, ask your person for their name and an email address or a phone number, and send only what they agree to give this business, in contact (name, and email or phone). Never make them up or send your own: without them nothing is written.",
+    "This business takes only what get_business_profile lists in item_types; there are no tools here for anything else.",
+    ...(booking
+      ? [
+          "For a booking: check_availability, then create_booking at one of its free times (leave endTime out and it follows the service's length), with an idempotency_key you generate and keep: a fresh random UUID for each new request, never one made from the request itself.",
+        ]
+      : []),
+    ...(order
+      ? [
+          "For an order, each line names a product from list_products by productId, with a quantity; leave prices out, and the business prices each line in its currency. A product priced from, as a range or on request is asked about with request_quote.",
+        ]
+      : []),
+    ...elsewhere,
+    "Keep the access token in a create result (accessToken): it is the only way to read (get_item_status) or cancel that item later. Every tool takes it as access_token or accessToken, and service_id as serviceId too. If the answer is lost, send the same request with the same random idempotency_key and the token comes back; a guessable key (booking-1) never gets it again.",
+    "If you carry a pass for the person (sdpass1_…), send it in `pass` on every call, and keep any pass a result hands you (identity.passes). The person is writing to this business and may never have heard of passes: speak to them of the business. The guide: https://surfingdog.ai/for-agents.md.",
+    "Every refusal names the exact fields to fix; repair the input and retry with the same idempotency_key.",
+    "When get_item_status shows an offer (another time, a quote, or changes to an order), relay offer.human as the business said it; accept only on your person's clear yes to the summary: accept_offer with its terms_sha and offer_id. Otherwise decline_offer, or make_offer with only what they would change (suggest_time for another time). A price of their own is their answer only where get_business_profile says price_negotiable; otherwise it goes to a person at the business, and what it proposed still stands. When it waits for details, send them with provide_details.",
+    "A confirmed booking or an accepted order can change: suggest_time (another time) or make_offer (quantities, a delivery date) asks the business, and what was agreed stands until it says yes (requested_change shows it; decline_offer takes it back). When the business asks for a change (offer.kind change), accept_offer takes it and decline_offer keeps what was agreed.",
+    "get_item_status also carries the conversation (thread): what the business wrote to your person, and what they wrote. Relay the business's replies as they are; a reply marked automated was not written by a person.",
+    ...(confirm ? [confirm] : []),
+    "Where the business states a period to withdraw (withdrawal on get_item_status), your person may withdraw from a paid booking or an order within it: withdraw_from_contract shows the statement first; send confirm_withdrawal on their yes. Once the goods reached them, request_return asks to send them back (faulty goods cost them nothing).",
+  ].join(" ");
+}
 
 /** Said only while the business takes payments straight from assistants' platforms (ADR-042). */
 export const AGENT_PAY_INSTRUCTIONS =
@@ -365,8 +424,11 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
     // The customer's assistant is speaking to the business: the server is the business's (N20).
     const profile = await caps.getBusinessProfile();
     const name = profile.name.trim() || profile.domain || "Inbox";
+    // Only the kinds the business takes here have tools (ADR-048): an agent is never offered a door that
+    // refuses it. A reply, an answer and a cancellation are about an item already made, and always listed.
+    const takes = new Set(profile.item_types);
     // A place to stay (ADR-037) says how its stays are asked for, held and booked, and has the tools.
-    const stays = await takesStays(caps);
+    const stays = takes.has("stay");
     // A trade (ADR-039) says how a job is asked for, with its photos, and where it works; a kitchen
     // (ADR-040) how its menu reads, allergens included, and how an order for a time is made.
     const work = await takesWork(caps);
@@ -381,24 +443,24 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
     // A kitchen that takes its orders on its own site (ADR-035): its menu reads here, orders go there.
     const ordersAt = menu ? await caps.food.orderDoorElsewhere() : null;
     const instructions = [
-      PUBLIC_INSTRUCTIONS,
+      publicInstructions(profile, { menuNamesOrders: menu && ordersAt !== null }),
       ...(stays ? [STAY_INSTRUCTIONS] : []),
       ...(work ? [TRADES_INSTRUCTIONS] : []),
-      ...(menu ? [foodInstructions(ordersAt)] : []),
+      ...(menu ? [foodInstructions(ordersAt, { orders: takes.has("order") })] : []),
       ...(agentPay ? [AGENT_PAY_INSTRUCTIONS] : []),
       ...(stripePay ? [STRIPE_PAY_INSTRUCTIONS] : []),
     ];
     const server = lenientTools(new McpServer({ name, version }, { instructions: instructions.join(" ") }));
     if (stays) registerPublicStayTools(server, caps, caller);
     if (work) registerPublicTradesTools(server, caps, caller);
-    if (menu) registerPublicFoodTools(server, caps, caller, { ordersAt });
+    if (menu) registerPublicFoodTools(server, caps, caller, { ordersAt, orders: takes.has("order") });
 
     server.registerTool(
       "get_business_profile",
       {
         title: "Business profile",
         description:
-          "Name, time zone, currency, languages and the item types this business accepts, and where it takes any other kind instead (doors_elsewhere: each with its URL, and the platform it is on when there is one).",
+          "Name, time zone, currency, languages and the item types this business takes here (only those: a request of another kind is refused), and where it takes any other kind instead (doors_elsewhere: each with its URL, and the platform it is on when there is one).",
         inputSchema: z.object({}),
         annotations: readOnly,
       },
@@ -452,7 +514,7 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
       {
         title: "Products",
         description:
-          "Orderable products with prices in minor units, each with its barcode (gtin, 14 digits) where it has one and whether it can be had (never a count). A variant names its group and options; price_model says how a price is meant (only fixed is ordered at it: from, range and quote go to the business to price); an age-restricted product carries the label to show (ID checked at handover: 18+). ids: read the live price of products a network showed you, before your person agrees; gtin: the products with that barcode, in any of its lengths. The price here is the one that counts.",
+          "Orderable products with prices in minor units, each with its barcode (gtin, 14 digits) where it has one and whether it can be had (never a count). A variant names its group and options; price_model says how a price is meant (only fixed is ordered with create_order: from, range and quote are asked about with request_quote); an age-restricted product carries the label to show (ID checked at handover: 18+). ids: read the live price of products a network showed you, before your person agrees; gtin: the products with that barcode, in any of its lengths. The price here is the one that counts.",
         inputSchema: listProductsInput,
         annotations: readOnly,
       },
@@ -480,113 +542,121 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
           };
         }),
     );
-    server.registerTool(
-      "quote_shipping",
-      {
-        title: "Shipping quote",
-        description:
-          "What shipping a basket to a place costs, by the business's own rate tables (a read, never an order): for each shipping profile its products ship under, the zone the place is in and each service with its fee in minor units (null with why: id_check, currency, weight_missing, too_heavy, over_bands). Products that do not ship, or whose price is not fixed, are listed in unquoted. An age-restricted product goes only by a service whose carrier checks ID at handover. The fee is still the business's to confirm on the order.",
-        inputSchema: quoteShippingInput,
-        annotations: readOnly,
-      },
-      (args) =>
-        run(async () => {
-          const q = await caps.quoteShipping(args);
-          const lines = q.quotes.map((g) => {
-            if (g.why === "no_profile") return "The business has not set shipping rates for these products.";
-            if (g.why === "not_shipped_there") return "The business does not ship these products there.";
-            const services = g.services
-              .map(
-                (sv) =>
-                  `${sv.name}: ${sv.fee ? moneyText(sv.fee) : `not available (${sv.why})`}, ${sv.transit_days.min}–${sv.transit_days.max} days`,
-              )
-              .join("; ");
-            return `${g.zone}: ${services}`;
-          });
-          const unquoted = q.unquoted.map((u) => `${u.product_id}: ${u.why.replace(/_/g, " ")}`);
-          return {
-            text: [...lines, ...unquoted, ...q.notes].join(" ") || "Nothing to quote.",
-            structured: q,
-          };
-        }),
-    );
-    server.registerTool(
-      "check_availability",
-      {
-        title: "Check availability",
-        description:
-          "Free start times for a service between two instants (at most 14 days). A time that has started, or that starts within the business's minimum notice, is not offered.",
-        inputSchema: checkAvailabilityInput,
-        annotations: readOnly,
-      },
-      (args) =>
-        run(async () => {
-          const r = await caps.checkAvailability(args, { now: caller.now ? caller.now() : Date.now(), caller });
-          return {
-            text: r.slots.length
-              ? `${r.slots.length} free slots for ${r.service.name}; first ${r.slots[0]?.startTime}.`
-              : `No free slots for ${r.service.name} in that window.`,
-            structured: r,
-          };
-        }),
-    );
-    server.registerTool(
-      "request_quote",
-      {
-        title: "Request a quote",
-        description: "Ask for a price on something custom. Creates a quote_request item.",
-        inputSchema: requestQuoteInput,
-        annotations: writes,
-      },
-      (args) =>
-        run(async () => {
-          const r = await caps.requestQuote(caller, args);
-          return {
-            text: `${humanOf(r, true)}${identityText(r.identity, args.contact?.name, { created: true })}`,
-            structured: r,
-          };
-        }),
-    );
-    server.registerTool(
-      "create_booking",
-      {
-        title: "Request a booking",
-        description:
-          "Request a service at a time. Check availability first. endTime and reservationFor.name may be left out: they follow from the service (its length, its name). A fixed-price service costs the business's price from list_services; a different totalPrice you send is only noted for the business. A priced booking binds your person only once they confirmed it: without terms_sha nothing is sent, and you get the summary to show them (confirm.summary, confirm.terms_sha); call again with that terms_sha on their clear yes. Returns the item and, if you have no account, an access_token.",
-        inputSchema: createBookingInput,
-        annotations: writes,
-      },
-      async (args) => {
-        try {
-          const r = await caps.createBooking(caller, args);
-          // A table for more than the business books online is a request for a price (ADR-040).
-          return ok(
-            `${r.note ? `${r.note} ` : ""}${humanOf(r, true)}${identityText(r.identity, args.contact?.name, { created: true })}`,
-            r,
-          );
-        } catch (error) {
-          return confirmOrFailed(error);
-        }
-      },
-    );
-    server.registerTool(
-      "create_order",
-      {
-        title: "Place an order",
-        description:
-          "Order products. Prices are in minor units. A line naming a product (productId or sku) costs the business's price from list_products, and the total follows; a different price you send is only noted for the business. A line naming no product waits for the business to price it. A priced order binds your person only once they confirmed it: without terms_sha nothing is sent, and you get the summary to show them (confirm.summary, confirm.terms_sha); call again with that terms_sha on their clear yes.",
-        inputSchema: createOrderInput,
-        annotations: writes,
-      },
-      async (args) => {
-        try {
-          const r = await caps.createOrder(caller, args);
-          return ok(`${humanOf(r, true)}${identityText(r.identity, args.contact?.name, { created: true })}`, r);
-        } catch (error) {
-          return confirmOrFailed(error);
-        }
-      },
-    );
+    if (takes.has("order")) {
+      server.registerTool(
+        "quote_shipping",
+        {
+          title: "Shipping quote",
+          description:
+            "What shipping a basket to a place costs, by the business's own rate tables (a read, never an order): for each shipping profile its products ship under, the zone the place is in and each service with its fee in minor units (null with why: id_check, currency, weight_missing, too_heavy, over_bands). Products that do not ship, or whose price is not fixed, are listed in unquoted. An age-restricted product goes only by a service whose carrier checks ID at handover. The fee is still the business's to confirm on the order.",
+          inputSchema: quoteShippingInput,
+          annotations: readOnly,
+        },
+        (args) =>
+          run(async () => {
+            const q = await caps.quoteShipping(args);
+            const lines = q.quotes.map((g) => {
+              if (g.why === "no_profile") return "The business has not set shipping rates for these products.";
+              if (g.why === "not_shipped_there") return "The business does not ship these products there.";
+              const services = g.services
+                .map(
+                  (sv) =>
+                    `${sv.name}: ${sv.fee ? moneyText(sv.fee) : `not available (${sv.why})`}, ${sv.transit_days.min}–${sv.transit_days.max} days`,
+                )
+                .join("; ");
+              return `${g.zone}: ${services}`;
+            });
+            const unquoted = q.unquoted.map((u) => `${u.product_id}: ${u.why.replace(/_/g, " ")}`);
+            return {
+              text: [...lines, ...unquoted, ...q.notes].join(" ") || "Nothing to quote.",
+              structured: q,
+            };
+          }),
+      );
+    }
+    if (takes.has("booking")) {
+      server.registerTool(
+        "check_availability",
+        {
+          title: "Check availability",
+          description:
+            "Free start times for a service between two instants (at most 14 days). A time that has started, or that starts within the business's minimum notice, is not offered.",
+          inputSchema: checkAvailabilityInput,
+          annotations: readOnly,
+        },
+        (args) =>
+          run(async () => {
+            const r = await caps.checkAvailability(args, { now: caller.now ? caller.now() : Date.now(), caller });
+            return {
+              text: r.slots.length
+                ? `${r.slots.length} free slots for ${r.service.name}; first ${r.slots[0]?.startTime}.`
+                : `No free slots for ${r.service.name} in that window.`,
+              structured: r,
+            };
+          }),
+      );
+    }
+    if (takes.has("quote_request")) {
+      server.registerTool(
+        "request_quote",
+        {
+          title: "Request a quote",
+          description: `Ask for a price on something custom, or on a service or product priced on request (itemOffered.serviceId or itemOffered.productId). Creates a quote_request item. ${CLIENT_WORDS}`,
+          inputSchema: requestQuoteInput,
+          annotations: writes,
+        },
+        (args) =>
+          run(async () => {
+            const r = await caps.requestQuote(caller, args);
+            return {
+              text: `${humanOf(r, true)}${identityText(r.identity, args.contact?.name, { created: true })}`,
+              structured: r,
+            };
+          }),
+      );
+    }
+    if (takes.has("booking")) {
+      server.registerTool(
+        "create_booking",
+        {
+          title: "Request a booking",
+          description: `Request a service at a time. Check availability first. ${CLIENT_WORDS} endTime and reservationFor.name may be left out: they follow from the service (its length, its name). A fixed-price service costs the business's price from list_services; a different totalPrice you send is only noted for the business. A priced booking binds your person only once they confirmed it: without terms_sha nothing is sent, and you get the summary to show them (confirm.summary, confirm.terms_sha); call again with that terms_sha on their clear yes. Returns the item and, if you have no account, an access_token.`,
+          inputSchema: createBookingInput,
+          annotations: writes,
+        },
+        async (args) => {
+          try {
+            const r = await caps.createBooking(caller, args);
+            // A table for more than the business books online is a request for a price (ADR-040).
+            return ok(
+              `${r.note ? `${r.note} ` : ""}${humanOf(r, true)}${identityText(r.identity, args.contact?.name, { created: true })}`,
+              r,
+            );
+          } catch (error) {
+            return confirmOrFailed(error);
+          }
+        },
+      );
+    }
+    if (takes.has("order")) {
+      server.registerTool(
+        "create_order",
+        {
+          title: "Place an order",
+          description: `Order products this business sells at a fixed price, at the business's price: each line names one by productId (or sku) from list_products, with a quantity. Leave price and totalPrice out: the business prices every line, and the total, in its currency. A price you send that is not the business's is refused, unless get_business_profile says price_negotiable (then it is your person's offer); one in another currency always is. A product priced from, as a range or on request is asked about with request_quote. ${CLIENT_WORDS} A priced order binds your person only once they confirmed it: without terms_sha nothing is sent, and you get the summary to show them (confirm.summary, confirm.terms_sha); call again with that terms_sha on their clear yes.`,
+          inputSchema: createOrderInput,
+          annotations: writes,
+        },
+        async (args) => {
+          try {
+            const r = await caps.createOrder(caller, args);
+            return ok(`${humanOf(r, true)}${identityText(r.identity, args.contact?.name, { created: true })}`, r);
+          } catch (error) {
+            return confirmOrFailed(error);
+          }
+        },
+      );
+    }
     server.registerTool(
       "get_item_status",
       {
@@ -761,7 +831,10 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
       "send_message",
       {
         title: "Send a message",
-        description: "Start a conversation, or reply on an item you own.",
+        // Always listed: it carries the replies on items already made, whatever the business takes now.
+        description: takes.has("message")
+          ? "Start a conversation, or reply on an item you made (item_id). To start one, contact needs your person's name and an email address or a phone number: ask them first, and send only what they agree to give this business; never make them up. A reply needs no contact."
+          : "Reply on an item you made (item_id). This business takes no new conversations here.",
         inputSchema: sendMessageInput,
         annotations: writes,
       },

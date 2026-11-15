@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { Capabilities } from "../../src/capabilities/service";
 import { countFirstStatements } from "../../src/spam/handles";
 import { WriteError } from "../../src/write/errors";
 import { agent, DAY, fakeJudge, idOf, MIN, owner, sentText, spamSetup, T0, visitor } from "./harness";
@@ -192,9 +193,12 @@ describe("a recognised platform's key, which signs for all its users", () => {
   });
 });
 
-/** A pitch with no contact at all, as a bulk sender writes it to every business. */
+/** A pitch, as a bulk sender writes it to every business. */
 const PITCH =
   "Hi, I noticed your website and we offer SEO services and guest posts. WhatsApp +62 812 5555 0101 for prices.";
+
+/** A made-up name and address for the i-th copy of a pitch: a bulk sender rotates them. */
+const seller = (i: number) => ({ name: `Seller ${i}`, email: `seller${i}@pitch${i}.example.org` });
 
 describe("a key from a directory nobody recognises", () => {
   const BULK = "bulkSenderOwnDirectoryKey000000000000000000";
@@ -222,7 +226,7 @@ describe("a key from a directory nobody recognises", () => {
 
   it("still makes a wave of the same pitch sent under it, as unsigned copies do", async () => {
     const s = await spamSetup();
-    for (let i = 0; i < 10; i++) await s.caps.sendMessage(via(T0 + i * MIN), { body: PITCH });
+    for (let i = 0; i < 10; i++) await s.caps.sendMessage(via(T0 + i * MIN), { body: PITCH, contact: seller(i) });
     const all = await screens(s);
     expect(all.slice(0, 2)).toEqual(["delivered", "delivered"]);
     expect(all.slice(4)).toEqual(Array(6).fill("aside:wave"));
@@ -234,9 +238,24 @@ describe("a key from a directory nobody recognises", () => {
 });
 
 describe("a request that names nobody", () => {
-  it("is a sender of its own: the same pitch, unsigned and with no contact, becomes a wave", async () => {
+  it("is refused before the filter (ADR-048): nothing is written, screened or counted", async () => {
     const s = await spamSetup();
-    for (let i = 0; i < 10; i++) await s.caps.sendMessage(agent(T0 + i * MIN), { body: PITCH });
+    // The doors as they are, without the harness's made-up client.
+    const raw = new Capabilities(s.db);
+    for (let i = 0; i < 3; i++) {
+      await expect(raw.sendMessage(agent(T0 + i * MIN), { body: PITCH })).rejects.toMatchObject({
+        code: "invalid_input",
+        details: { reason: "client_details", missing: ["name", "email_or_phone"] },
+      });
+    }
+    expect(await s.q("SELECT COUNT(*) FROM items")).toEqual([[0]]);
+    expect(await s.q("SELECT COUNT(*) FROM spam_verdicts")).toEqual([[0]]);
+    expect(await s.q("SELECT COUNT(*) FROM spam_handles")).toEqual([[0]]);
+  });
+
+  it("is no way round the filter: the same pitch under made-up names and addresses, unsigned, becomes a wave", async () => {
+    const s = await spamSetup();
+    for (let i = 0; i < 10; i++) await s.caps.sendMessage(agent(T0 + i * MIN), { body: PITCH, contact: seller(i) });
     const all = await screens(s);
     expect(all.slice(0, 2)).toEqual(["delivered", "delivered"]);
     expect(all.slice(2, 4)).toEqual(["warned:same_text", "warned:same_text"]);

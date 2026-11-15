@@ -206,7 +206,7 @@ async function confirmedBooking(s: Setup, start = THU_12) {
 /** An order the customer's assistant made for two chains, accepted and paid (€37.00). */
 async function paidOrder(s: Setup) {
   const r = await s.caps.createOrder(anon(), {
-    payload: { orderedItem: [{ productId: s.chain, name: "x", quantity: 2, price: EUR(1) }], totalPrice: EUR(1) },
+    payload: { orderedItem: [{ productId: s.chain, quantity: 2 }] },
     contact: { name: "Rita", email: "rita@example.com", locale: "en" },
   });
   const id = r.view.item.id;
@@ -293,7 +293,7 @@ describe("a change both sides agreed", () => {
   it("a change to an order's delivery date moves its due; one to its quantities keeps the date first agreed", async () => {
     const s = await setup();
     const r = await s.caps.createOrder(anon(), {
-      payload: { orderedItem: [{ productId: s.chain, name: "x", quantity: 2, price: EUR(1) }], totalPrice: EUR(1) },
+      payload: { orderedItem: [{ productId: s.chain, quantity: 2 }] },
       contact: { name: "Rita", email: "rita@example.com", locale: "en" },
     });
     const id = r.view.item.id;

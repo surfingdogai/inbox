@@ -11,7 +11,7 @@ import { MIGRATIONS } from "../src/schema/migrations.generated";
 import { business, items, jobs, outboundMail, products, services, threadEntries } from "../src/schema/tables";
 import { createSecretBox } from "../src/secrets/box";
 import { type Caller, rowToItem, transitionItem, WriteError } from "../src/write/index";
-import { confirming, makeClient, openAllWeek, resetTables } from "./harness";
+import { confirming, makeClient, openAllWeek, resetTables, withClient } from "./harness";
 
 /**
  * Returns and withdrawals under attack (ADR-018 §3.4, §7, §8): the same goods sent back twice for two
@@ -121,7 +121,7 @@ type Setup = Awaited<ReturnType<typeof setup>>;
 /** Two chains, accepted and paid (€37.00). */
 async function paidOrder(s: Setup) {
   const r = await s.caps.createOrder(anon(), {
-    payload: { orderedItem: [{ productId: s.chain, quantity: 2, name: "x", price: EUR(1) }], totalPrice: EUR(1) },
+    payload: { orderedItem: [{ productId: s.chain, quantity: 2 }] },
     contact: { name: "Rita", email: "rita@example.com", locale: "en" },
   });
   const id = r.view.item.id;
@@ -610,8 +610,8 @@ describe("the confirm step's fingerprint", () => {
       startTime: iso(start),
       endTime: iso(start + 90 * MIN),
     });
-    // Unwrapped, so the 409 comes back to us.
-    const raw = new Capabilities(s.db, createSecretBox(["returns-attacks-secret-0123456789abcdef"]), BASE);
+    // Without the confirm step answered, so the 409 comes back to us.
+    const raw = withClient(new Capabilities(s.db, createSecretBox(["returns-attacks-secret-0123456789abcdef"]), BASE));
     const asked = await fail(raw.createBooking(anon(), { payload: payload(s.svc, "Full service") }));
     expect(asked.code).toBe("confirm_terms");
     const sha = (asked.details as { terms_sha: string }).terms_sha;

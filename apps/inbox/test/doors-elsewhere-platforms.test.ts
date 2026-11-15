@@ -111,10 +111,10 @@ describe("a studio whose bookings are at Fresha", () => {
     expect(await refused.json()).toMatchObject({
       details: { reason: "taken_elsewhere", item_type: "booking", url: FRESHA, platform: "fresha", place: "Fresha" },
     });
+    // On MCP there is no tool for a booking here at all (ADR-048): the server's instructions send it to Fresha.
     const agent = await s.mcp();
-    const r = await agent.callTool({ name: "create_booking", arguments: asked });
-    expect(r.isError).toBe(true);
-    expect(JSON.stringify(r.content)).toContain(`This business takes bookings at Fresha (${FRESHA}), not here`);
+    expect((await agent.listTools()).tools.map((t) => t.name)).not.toContain("create_booking");
+    expect(agent.getInstructions()).toContain(`This business takes bookings at Fresha (${FRESHA}), not here`);
     await agent.close();
     const html = await (await s.get("/", { "accept-language": "en" })).text();
     expect(html).toContain(`<a href="${FRESHA}" rel="noopener noreferrer">Book at Fresha</a>`);

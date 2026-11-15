@@ -300,7 +300,7 @@ describe("limits", () => {
       const message = () =>
         capped.http(host, "POST", "/v1/messages", {
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ body: "Hello" }),
+          body: JSON.stringify({ body: "Hello", contact: { name: "Rita", email: "rita@example.com" } }),
         });
       expect((await upload()).status).toBe(201);
       expect((await upload()).status).toBe(201);

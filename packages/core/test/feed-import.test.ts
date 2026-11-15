@@ -275,6 +275,7 @@ describe("importing", () => {
     expect(all.find((p) => p.name === "Mug")).toMatchObject({ active: 0, price: { value: 800, currency: "EUR" } });
     expect((await caps.listProducts({ limit: 50 })).items).toEqual([]);
     const tea = all.find((p) => p.name === "Tea");
+    // Nothing is on sale, so no order is taken here at all (ADR-048).
     await expect(
       confirming(caps).createOrder(customer, {
         payload: {
@@ -282,7 +283,7 @@ describe("importing", () => {
           totalPrice: { value: 1_200, currency: "EUR" },
         },
       }),
-    ).rejects.toMatchObject({ code: "invalid_input" });
+    ).rejects.toMatchObject({ code: "not_allowed", details: { reason: "order_not_offered" } });
     // A price again puts it back on sale.
     await caps.feeds.importBody(feed.id, ["id,title,price", "A1,Tea,12.50", "A2,Mug,8.00"].join("\n"), T0 + 2000);
     expect((await caps.setup.listProducts(owner)).find((p) => p.name === "Tea")).toMatchObject({
@@ -338,19 +339,22 @@ describe("importing", () => {
     expect(await caps.feeds.applyPriceChanges(feed.id, changes, end - 1)).toEqual({ applied: 0 });
     expect(await caps.feeds.applyPriceChanges(feed.id, changes, end)).toEqual({ applied: 1 });
     expect((await caps.listProducts({ limit: 5 })).items[0]?.price).toEqual({ value: 8_000, currency: "USD" });
-    // An order placed after the sale ended pays the regular price.
+    // An order placed after the sale ended pays the regular price; the sale's price is no longer ours to ask.
     const helmet = (await caps.listProducts({ limit: 5 })).items[0];
-    const order = await confirming(caps).createOrder(
-      { ...customer, now: () => Date.parse("2026-11-28T17:00:00Z") },
-      {
+    const after = { ...customer, now: () => Date.parse("2026-11-28T17:00:00Z") };
+    await expect(
+      confirming(caps).createOrder(after, {
         payload: {
           orderedItem: [
             { productId: helmet?.id as string, name: "Helmet", quantity: 1, price: { value: 4_000, currency: "USD" } },
           ],
           totalPrice: { value: 4_000, currency: "USD" },
         },
-      },
-    );
+      }),
+    ).rejects.toMatchObject({ details: { reason: "price_not_ours" } });
+    const order = await confirming(caps).createOrder(after, {
+      payload: { orderedItem: [{ productId: helmet?.id as string, quantity: 1 }] },
+    });
     expect(order.view.item.payload).toMatchObject({ totalPrice: { value: 8_000, currency: "USD" } });
   });
 

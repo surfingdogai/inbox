@@ -467,6 +467,15 @@ describe("requests", () => {
     expect(leadOf(ask({}, { booker: { first_name: "A", last_name: "B", email: "not an address" } }))).toEqual({
       messages: [expect.objectContaining({ code: "invalid", path: "$.booker.email" })],
     });
+    // Judged as every door judges a client's details (ADR-048): a number with letters reaches nobody, and a
+    // name with no letter is no name, so neither is a lead yet (the session asks for one, lead_guest_required).
+    expect(
+      leadOf(ask({}, { booker: { first_name: "Wanjiru", last_name: "Kamau", phone_number: "call me" } })),
+    ).toBeNull();
+    expect(leadOf(ask({}, { booker: { first_name: "1", last_name: "2", phone_number: "+254700000123" } }))).toBeNull();
+    expect(leadOf(ask({}, { booker: { first_name: "A", last_name: "B", email: "ana@localhost" } }))).toEqual({
+      messages: [expect.objectContaining({ code: "invalid", path: "$.booker.email" })],
+    });
   });
 });
 

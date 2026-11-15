@@ -11,7 +11,7 @@ import {
 import { logMailOut } from "@surfingdog/platform";
 import { describe, expect, it } from "vitest";
 import { createInbox } from "../src/app";
-import { confirmed, freshDb } from "./harness";
+import { aProduct, confirmed, freshDb } from "./harness";
 
 /**
  * Stripe Pay (ADR-045), end to end through the doors an owner and a customer's assistant use: the owner sets the
@@ -71,19 +71,20 @@ async function setup(stripePay: { to: string; currencies: string[] } | null = { 
 }
 type S = Awaited<ReturnType<typeof setup>>;
 
-/** A customer's order through the public door, confirmed by its person, accepted by the owner unless asked not to. */
+/**
+ * A customer's order through the public door, for two bags the roaster sells (ADR-048), confirmed by its person,
+ * accepted by the owner unless asked not to.
+ */
 async function order(s: S, opts: { currency?: string; accept?: boolean } = {}) {
   const currency = opts.currency ?? "GBP";
+  const beans = await aProduct(s.db, { name: "Coffee beans, 1 kg", value: 1450, currency });
   const made = await confirmed(
     (r) => s.inbox.app.request(r),
     new Request(`${BASE}/v1/orders`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        payload: {
-          orderedItem: [{ name: "Coffee beans, 1 kg", quantity: 2, price: { value: 1450, currency } }],
-          totalPrice: { value: 2900, currency },
-        },
+        payload: { orderedItem: [{ productId: beans, quantity: 2 }] },
         contact: { name: "Rowan", email: "rowan@example.com", locale: "en" },
       }),
     }),

@@ -428,12 +428,14 @@ export async function ingestEmail(
   // Its links are kept for the business's people even where the receiving server said nothing of its
   // sender, never where it found the sender forged: only the owner-alone handling above needs its word.
   const keepLinks = account || (auth?.dmarc !== "fail" && looksLikeAccountNotice(read, from));
+  // The name their mail gives, when it is one: never an address standing in for a name (ADR-048).
+  const fromName = senderName(parsed.from?.name);
   const created = await caps.sendMessage(
     caller,
     {
       body: keepLinks ? withLinks(words, linksOf(parsed)) : text,
       ...(subject ? { subject: subject.slice(0, MAX_SUBJECT) } : {}),
-      contact: { email: from, ...(parsed.from?.name ? { name: parsed.from.name } : {}) },
+      contact: { email: from, ...(fromName ? { name: fromName } : {}) },
       ...(messageId ? { idempotency_key: messageId } : {}),
     },
     {
@@ -1260,6 +1262,15 @@ export async function noticeBucket(from: string, o: { readonly byDomain?: boolea
     : senderBucket(from);
 }
 
+/**
+ * The sender's name as their mail gives it (ADR-048): trimmed, at most 200 characters; none when it is empty or an
+ * address. The address stands for them then, on every screen: the inbox never makes up a name.
+ */
+function senderName(name: string | undefined): string | undefined {
+  const n = name?.trim().slice(0, 200);
+  return n && !n.includes("@") ? n : undefined;
+}
+
 function limitedMail(retryAfterSec: number): IngestResult {
   console.info("email: too many emails right now; answered with a temporary failure");
   return {
@@ -1352,7 +1363,9 @@ async function keepNotice(
   // Its links are kept, a flood's too (`linksOf` is bounded): never where its sender was found forged.
   const links = o.auth?.dmarc !== "fail" ? linksOf(parsed) : [];
   const subject = (parsed.subject ?? "").trim().slice(0, MAX_SUBJECT);
+  // The display name as it came, for the spam filter; the contact's name only when it is one (ADR-048).
   const name = parsed.from?.name?.trim().slice(0, 200);
+  const contactName = senderName(parsed.from?.name);
   const email = from && CONTACT_EMAIL.test(from) ? from : null;
   const who = email ?? from ?? "unknown";
   const caller: Caller = {
@@ -1369,7 +1382,9 @@ async function keepNotice(
     {
       body: links.length ? withLinks(said, links) : cut(said),
       ...(subject ? { subject } : {}),
-      ...(email || name ? { contact: { ...(email ? { email } : {}), ...(name ? { name } : {}) } } : {}),
+      ...(email || contactName
+        ? { contact: { ...(email ? { email } : {}), ...(contactName ? { name: contactName } : {}) } }
+        : {}),
       ...(messageId ? { idempotency_key: messageId } : {}),
     },
     {

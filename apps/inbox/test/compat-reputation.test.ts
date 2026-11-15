@@ -6,7 +6,7 @@ import { fakeNetwork } from "../../../packages/adapters/test/fake-network";
 // The published verifier, by path (published on its own, deliberately not a dependency of this app).
 import { verifyWebhook } from "../../../packages/sdk/src/index";
 import { createInbox } from "../src/app";
-import { confirmed, freshDb, openAllWeek } from "./harness";
+import { aProduct, confirmed, freshDb, openAllWeek } from "./harness";
 
 /**
  * What an existing integration sees after people and outcomes arrive (ADR-017 §2.5, R18): a
@@ -238,14 +238,13 @@ describe("an existing integration after ADR-017", () => {
 
   it("still tells both sides when an accepted order is cancelled, by the customer or by the owner", async () => {
     const s = await setup("none");
+    // What the shop sells (ADR-048): an order names it.
+    const chain = await aProduct(s.db, { name: "Chain", value: 1500 });
     const order = async () => {
       const r = await confirmed(
         (r) => s.app.request(r),
         post("/v1/orders", {
-          payload: {
-            orderedItem: [{ name: "Chain", quantity: 1, price: { value: 1500, currency: "EUR" } }],
-            totalPrice: { value: 1500, currency: "EUR" },
-          },
+          payload: { orderedItem: [{ productId: chain, quantity: 1 }] },
           contact: { name: "Rita", email: "rita@example.com" },
         }),
       );

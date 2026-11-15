@@ -46,6 +46,8 @@ async function setUp(opts: { inbound?: string | null } = {}) {
     doc: {
       business: { name: "Oficina Maré" },
       email: { fromAddress: "hello@oficinamare.example", ...(inbound ? { inboundAddress: inbound } : {}) },
+      // It lists nothing yet, and takes requests for a price in their own words (ADR-048).
+      doors: { quoteRequest: true },
     },
   });
   const mail = logMailOut();

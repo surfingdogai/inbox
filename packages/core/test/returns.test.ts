@@ -132,8 +132,7 @@ type Setup = Awaited<ReturnType<typeof setup>>;
 async function paidOrder(s: Setup, lines = [{ productId: s.chain, quantity: 2 }]) {
   const r = await s.caps.createOrder(anon(), {
     payload: {
-      orderedItem: lines.map((l) => ({ ...l, name: "x", price: EUR(1) })),
-      totalPrice: EUR(1),
+      orderedItem: lines,
     },
     contact: { name: "Rita", email: "rita@example.com", locale: "en" },
   });
@@ -301,7 +300,7 @@ describe("a withdrawal before the goods went out", () => {
     expect(await refundsOf(s.db, o.id)).toHaveLength(1);
 
     const unpaid = await s.caps.createOrder(anon(), {
-      payload: { orderedItem: [{ productId: s.chain, name: "x", quantity: 1, price: EUR(1) }], totalPrice: EUR(1) },
+      payload: { orderedItem: [{ productId: s.chain, quantity: 1 }] },
       contact: { email: "ana@example.com" },
     });
     await transitionItem(s.db, owner, { itemId: unpaid.view.item.id, event: "accept" });
@@ -353,7 +352,7 @@ describe("a withdrawal before the goods went out", () => {
   it("is refused to a request not agreed yet: the customer cancels that", async () => {
     const s = await setup();
     const r = await s.caps.createOrder(anon(), {
-      payload: { orderedItem: [{ productId: s.chain, name: "x", quantity: 1, price: EUR(1) }], totalPrice: EUR(1) },
+      payload: { orderedItem: [{ productId: s.chain, quantity: 1 }] },
     });
     const e = await fail(
       s.caps.customer.withdraw(anon(r.accessToken), { item_id: r.view.item.id, access_token: r.accessToken }),
@@ -887,7 +886,7 @@ describe("the confirmations of a contract the customer may withdraw from", () =>
   it("carry the right, its link, the model form and who we are; a product excepted says why", async () => {
     const s = await setup();
     const made = await s.caps.createOrder(anon(), {
-      payload: { orderedItem: [{ productId: s.chain, name: "x", quantity: 2, price: EUR(1) }], totalPrice: EUR(1) },
+      payload: { orderedItem: [{ productId: s.chain, quantity: 2 }] },
       contact: { name: "Rita", email: "rita@example.com", locale: "en" },
     });
     const o = { id: made.view.item.id };
@@ -920,7 +919,7 @@ describe("the confirmations of a contract the customer may withdraw from", () =>
     expect(sent?.bodyText).not.toContain("Model withdrawal form");
 
     const cheese = await s.caps.createOrder(anon(), {
-      payload: { orderedItem: [{ productId: s.cheese, name: "x", quantity: 1, price: EUR(1) }], totalPrice: EUR(1) },
+      payload: { orderedItem: [{ productId: s.cheese, quantity: 1 }] },
       contact: { email: "rita@example.com", locale: "en" },
     });
     await transitionItem(s.db, owner, { itemId: cheese.view.item.id, event: "accept" });
@@ -935,7 +934,7 @@ describe("the confirmations of a contract the customer may withdraw from", () =>
       commerce: { legal: { country: "PT", legalName: "Oficina Maré Lda", vatId: "500000000" } },
     });
     const r = await s.caps.createOrder(anon(), {
-      payload: { orderedItem: [{ productId: s.chain, name: "x", quantity: 1, price: EUR(1) }], totalPrice: EUR(1) },
+      payload: { orderedItem: [{ productId: s.chain, quantity: 1 }] },
       contact: { email: "rita@example.com", locale: "pt-PT" },
     });
     await transitionItem(s.db, owner, { itemId: r.view.item.id, event: "accept" });

@@ -1,6 +1,14 @@
 import { eq, inArray } from "drizzle-orm";
 import type { Db } from "../db";
-import type { Item, ItemType, Money, PayloadOf, Personalised } from "../domain/types";
+import {
+  type Item,
+  type ItemType,
+  type Money,
+  type OrderRequestPayload,
+  orderRequestPayloadSchema,
+  type PayloadOf,
+  type Personalised,
+} from "../domain/types";
 import { orderExtras } from "../kitchen/order";
 import { priceOptions } from "../menu/options";
 import { menuOf } from "../menu/schema";
@@ -8,7 +16,8 @@ import { floorsFor } from "../negotiation/catalogue";
 import { type Reward, rewardFor, rewardPrice, type Standing } from "../negotiation/rewards";
 import { business, products, services } from "../schema/tables";
 import { readSettings } from "../settings/schema";
-import { type FieldProblem, WriteError } from "./errors";
+import { moneyText } from "../util/money";
+import { type FieldProblem, fromZod, WriteError } from "./errors";
 
 /** A customer's create, priced: the payload to store, and whether any of its price is not the business's. */
 export interface Priced {
@@ -43,7 +52,7 @@ export async function priceFromCatalogue(
   now: number = Date.now(),
 ): Promise<Priced> {
   if (type === "booking") return priceBooking(db, payload as PayloadOf<"booking">, pricing);
-  if (type === "order") return priceOrder(db, payload as PayloadOf<"order">, pricing, now);
+  if (type === "order") return priceOrder(db, payload as OrderRequestPayload, pricing, now);
   return { payload, unpriced: false };
 }
 
@@ -234,9 +243,18 @@ async function serviceTotal(db: Db, price: ServicePrice, partySize: number | und
   return { value, currency: (price.currency ?? (await businessCurrency(db))).toUpperCase() };
 }
 
+/** One line of an order as it is stored: named and priced. */
+type OrderLine = PayloadOf<"order">["orderedItem"][number];
+
+/**
+ * An order priced from the catalogue. It reads an order as a customer's request may send it
+ * (`orderRequestPayloadSchema`, ADR-048): a line without a price, or an order without a total, states no
+ * price of the customer's, and the catalogue gives both. A line the catalogue does not price keeps what
+ * it was sent; one sent without a price is refused when the order is stored, which reads it strictly.
+ */
 async function priceOrder(
   db: Db,
-  payload: PayloadOf<"order">,
+  payload: OrderRequestPayload,
   pricing: PricingFor | undefined,
   now: number,
 ): Promise<Priced> {
@@ -253,7 +271,7 @@ async function priceOrder(
   const clash: FieldProblem[] = [];
   const offSale: FieldProblem[] = [];
   const optionProblems: FieldProblem[] = [];
-  const orderedItem: PayloadOf<"order">["orderedItem"] = [];
+  const orderedItem: OrderLine[] = [];
   lines.forEach((line, i) => {
     const byId = line.productId !== undefined ? catalogue.byId.get(line.productId) : undefined;
     const bySku = line.sku !== undefined ? catalogue.bySku.get(line.sku) : undefined;
@@ -267,7 +285,7 @@ async function priceOrder(
     const product = byId ?? bySku;
     if (!product) {
       unpriced = true;
-      orderedItem.push(line);
+      orderedItem.push(line as OrderLine);
       return;
     }
     // A product taken off sale, or past the last moment it could be ordered (catalogue version 2's
@@ -283,7 +301,7 @@ async function priceOrder(
       unpriced = true;
       const { sku: _sku, options: _opts, ...kept } = line;
       const sku = product.sku !== null && product.sku.length <= 100 ? { sku: product.sku } : {};
-      orderedItem.push({ ...kept, productId: product.id, ...sku, name: clip(product.name, 200) });
+      orderedItem.push({ ...kept, productId: product.id, ...sku, name: clip(product.name, 200) } as OrderLine);
       return;
     }
     // A menu item's options are priced from the business's menu (ADR-040): what each adds, per unit,
@@ -320,9 +338,10 @@ async function priceOrder(
       ...(rewarded ? { listPrice: list } : {}),
       ...(opts?.options.length ? { options: opts.options } : {}),
     };
-    // A line the assistant wrote at the list price is not a price of the customer's: they pay theirs.
+    // A line the assistant wrote at the list price is not a price of the customer's: they pay theirs. A line
+    // sent without a price states none (ADR-048).
     orderedItem.push(
-      sameMoney(line.price, ours) || sameMoney(line.price, list)
+      line.price === undefined || sameMoney(line.price, ours) || sameMoney(line.price, list)
         ? named
         : { ...named, customerStatedPrice: line.price },
     );
@@ -348,6 +367,8 @@ async function priceOrder(
   const problems: FieldProblem[] = [];
   let total = 0;
   orderedItem.forEach((l, i) => {
+    // A line the catalogue does not price, sent without a price: the stored order's own read refuses it.
+    if (l.price === undefined) return;
     if (l.price.currency !== currency) {
       problems.push({
         path: `payload.orderedItem.${i}.price.currency`,
@@ -397,13 +418,174 @@ async function priceOrder(
       ...(extras.tip ? { tip: extras.tip } : {}),
       orderedItem,
       totalPrice: ours,
-      ...(sameMoney(stated, ours) || (personalised && sameMoney(stated, personalised.listPrice))
+      // An order sent without a total states none (ADR-048).
+      ...(stated === undefined || sameMoney(stated, ours) || (personalised && sameMoney(stated, personalised.listPrice))
         ? {}
         : { customerStatedPrice: stated }),
       ...(personalised ? { personalised } : {}),
     },
     unpriced,
   };
+}
+
+/** The catalogue names of `names`, as a sentence lists them: "Bread", "Bread and Wine", "Bread, Wine and Oil". */
+function listed(names: readonly string[]): string {
+  return names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : (names[0] ?? "");
+}
+
+/**
+ * An assistant's order as the business takes it (ADR-048): each line names a product it sells (`productId`, else
+ * `sku`), on sale, priced `fixed`, and a price or a total the request carries is the business's, in its currency.
+ * While the business takes a customer's own price (`negotiation.priceCounters`, ADR-018 Q1) a different price in its
+ * currency is their offer and is kept as before. Throws the first refusal that applies, naming every line it holds for.
+ */
+export async function checkOrderLines(
+  db: Db,
+  payload: unknown,
+  o: { readonly pricing?: PricingFor | undefined; readonly now: number; readonly counters: boolean },
+): Promise<void> {
+  const parsed = orderRequestPayloadSchema.safeParse(payload);
+  if (!parsed.success) throw fromZod(parsed.error, "payload");
+  const lines = parsed.data.orderedItem;
+  const catalogue = await productsFor(db, lines);
+  const at = (i: number) => `payload.orderedItem.${i}`;
+  /** Lines naming no product, and lines naming one we do not have, in the order they came. */
+  const unnamed: { i: number; problem: FieldProblem }[] = [];
+  const unknown: { i: number; problem: FieldProblem }[] = [];
+  const offSale: FieldProblem[] = [];
+  const onRequest: { i: number; product: CatalogueProduct }[] = [];
+  lines.forEach((line, i) => {
+    if (line.productId === undefined && line.sku === undefined) {
+      unnamed.push({
+        i,
+        problem: {
+          path: `${at(i)}.productId`,
+          problem: "missing",
+          message: "one of our products, by its id from list_products",
+        },
+      });
+      return;
+    }
+    const product =
+      (line.productId !== undefined ? catalogue.byId.get(line.productId) : undefined) ??
+      (line.sku !== undefined ? catalogue.bySku.get(line.sku) : undefined);
+    if (!product) {
+      unknown.push({
+        i,
+        problem: {
+          path: line.productId !== undefined ? `${at(i)}.productId` : `${at(i)}.sku`,
+          problem: "invalid",
+          message: "no such product here",
+        },
+      });
+      return;
+    }
+    if (product.active === 0 || (product.availableUntil !== null && product.availableUntil <= o.now)) {
+      offSale.push({ path: at(i), problem: "invalid", message: "not on sale" });
+      return;
+    }
+    if (product.priceModel !== "fixed") onRequest.push({ i, product });
+  });
+  if (unknown.length) {
+    throw new WriteError(
+      "invalid_input",
+      "We sell no product by that id or sku: name one of ours on each line, by its productId from list_products. Nothing was written.",
+      {
+        fields: [...unknown, ...unnamed].sort((a, b) => a.i - b.i).map((l) => l.problem),
+        details: { reason: "unknown_product" },
+      },
+    );
+  }
+  if (unnamed.length) {
+    throw new WriteError(
+      "invalid_input",
+      "Each line of an order names one of our products, by its productId from list_products (or its sku). Nothing was written.",
+      { fields: unnamed.map((l) => l.problem), details: { reason: "product_missing" } },
+    );
+  }
+  if (offSale.length) {
+    throw new WriteError(
+      "invalid_input",
+      "A line is for a product we no longer sell, so it cannot be ordered. Nothing was written.",
+      { fields: offSale, details: { reason: "not_on_sale" } },
+    );
+  }
+  if (onRequest.length) {
+    const names = [...new Map(onRequest.map(({ product }) => [product.id, product.name])).values()];
+    throw new WriteError(
+      "invalid_input",
+      `We price ${listed(names)} on request, so ${names.length > 1 ? "they are" : "it is"} not ordered here: ask for a price with request_quote (itemOffered.productId). Nothing was written.`,
+      {
+        fields: onRequest.map(({ i }) => ({
+          path: `${at(i)}.productId`,
+          problem: "invalid" as const,
+          message: "priced on request: ask with request_quote",
+        })),
+        details: { reason: "not_priced" },
+      },
+    );
+  }
+  const priced = await priceOrder(db, parsed.data, o.pricing, o.now);
+  const total = priced.payload.totalPrice as Money | undefined;
+  if (!total) return;
+  const currency = total.currency;
+  const foreign: FieldProblem[] = [];
+  lines.forEach((line, i) => {
+    if (line.price && line.price.currency.toUpperCase() !== currency) {
+      foreign.push({
+        path: `${at(i)}.price.currency`,
+        problem: "invalid",
+        message: `must be ${currency}, the currency of our prices`,
+      });
+    }
+  });
+  const sentTotal = parsed.data.totalPrice;
+  if (sentTotal && sentTotal.currency.toUpperCase() !== currency) {
+    foreign.push({
+      path: "payload.totalPrice.currency",
+      problem: "invalid",
+      message: `must be ${currency}, the currency of our prices`,
+    });
+  }
+  if (foreign.length) {
+    throw new WriteError(
+      "invalid_input",
+      `Our prices are in ${currency}: send each price and the total in ${currency}, or leave them out and we price the order. Nothing was written.`,
+      { fields: foreign, details: { reason: "currency_not_ours", currency } },
+    );
+  }
+  // A price of the customer's own is their offer where the business takes one (ADR-018 Q1): kept, as before.
+  if (o.counters) return;
+  const pricedLines = (priced.payload as PayloadOf<"order">).orderedItem;
+  const notOurs = pricedLines.flatMap((line, i) => (line.customerStatedPrice ? [{ i, line }] : []));
+  if (notOurs.length) {
+    const ours = (line: OrderLine) => line.listPrice ?? line.price;
+    throw new WriteError(
+      "invalid_input",
+      `A price on this order is not ours: ${notOurs.map(({ line }) => `${line.name} is ${moneyText(ours(line))} each`).join("; ")}. Send our prices, or leave price out and we price each line. Nothing was written.`,
+      {
+        fields: notOurs.map(({ i, line }) => ({
+          path: `${at(i)}.price`,
+          problem: "invalid" as const,
+          message: `ours is ${moneyText(ours(line))}`,
+        })),
+        details: {
+          reason: "price_not_ours",
+          prices: notOurs.map(({ i, line }) => ({ line: i, product_id: line.productId, price: ours(line) })),
+        },
+      },
+    );
+  }
+  if ((priced.payload as PayloadOf<"order">).customerStatedPrice) {
+    throw new WriteError(
+      "invalid_input",
+      `This order comes to ${moneyText(total)}: send that as totalPrice, or leave totalPrice out and we work it out. Nothing was written.`,
+      {
+        fields: [{ path: "payload.totalPrice", problem: "invalid", message: `ours is ${moneyText(total)}` }],
+        details: { reason: "total_not_ours", total },
+      },
+    );
+  }
 }
 
 /**

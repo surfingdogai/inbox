@@ -1,10 +1,10 @@
 import { createApiKey } from "@surfingdog/adapters";
-import type { Db } from "@surfingdog/core";
+import { createItem, type Db } from "@surfingdog/core";
 import { logMailOut } from "@surfingdog/platform";
 import { describe, expect, it } from "vitest";
 import { MOLLIE_LIVE_KEY, STRIPE_LIVE_KEY, STRIPE_TEST_KEY } from "../../../packages/adapters/test/fixtures/payments";
 import { createInbox } from "../src/app";
-import { confirmed, freshDb } from "./harness";
+import { aProduct, confirmed, freshDb } from "./harness";
 import { molliePlatform, stripePlatform } from "./pay-platforms";
 
 /**
@@ -89,18 +89,16 @@ async function connectStripe(s: S, values: Record<string, string> = { api_key: S
   return (await res.json()) as { id: string; mode: string; pay_on: boolean; payments: Record<string, unknown> };
 }
 
-/** An order of the customer's, through the public door, accepted by the owner. */
+/** An order of the customer's, through the public door, accepted by the owner: for a product it sells (ADR-048). */
 async function acceptedOrder(s: S, value = 4500) {
+  const product = await aProduct(s.db, { name: "Colour and cut", value });
   const made = await confirmed(
     (r) => s.inbox.app.request(r),
     new Request(`${BASE}/v1/orders`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        payload: {
-          orderedItem: [{ name: "Colour and cut", quantity: 1, price: { value, currency: "EUR" } }],
-          totalPrice: { value, currency: "EUR" },
-        },
+        payload: { orderedItem: [{ productId: product, quantity: 1 }] },
         contact: { name: "Rita", email: "rita@example.com", locale: "en" },
       }),
     }),
@@ -426,16 +424,14 @@ describe("an accepted order, paid into the business's own Stripe account", () =>
   it("leaves alone an order the owner gave a payment link of their own", async () => {
     const s = await setup();
     await connectStripe(s);
+    const card = await aProduct(s.db, { name: "Gift card", value: 3000 });
     const made = await confirmed(
       (r) => s.inbox.app.request(r),
       new Request(`${BASE}/v1/orders`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          payload: {
-            orderedItem: [{ name: "Gift card", quantity: 1, price: { value: 3000, currency: "EUR" } }],
-            totalPrice: { value: 3000, currency: "EUR" },
-          },
+          payload: { orderedItem: [{ productId: card, quantity: 1 }] },
           contact: { email: "rita@example.com" },
         }),
       }),
@@ -473,6 +469,9 @@ describe("a quote the customer accepts", () => {
   it("becomes an order that is asked to pay at a link", async () => {
     const s = await setup();
     await connectStripe(s);
+    // It lists nothing yet, and takes requests for a price in their own words (ADR-048).
+    const doors = await s.call("PUT", "/v1/owner/settings", { doc: { doors: { quoteRequest: true } } }, s.owner);
+    expect(doors.status, await doors.clone().text()).toBe(200);
     const asked = await s.call("POST", "/v1/quotes", {
       payload: { itemOffered: { name: "Wedding hair" }, description: "Bride and two bridesmaids", quantity: 1 },
       contact: { name: "Rita", email: "rita@example.com", locale: "en" },
@@ -708,16 +707,14 @@ describe("when Stripe does not make the link", () => {
     const s = await setup();
     await connectStripe(s);
     await drain(s);
+    const card = await aProduct(s.db, { name: "Gift card", value: 3000 });
     const made = await confirmed(
       (r) => s.inbox.app.request(r),
       new Request(`${BASE}/v1/orders`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          payload: {
-            orderedItem: [{ name: "Gift card", quantity: 1, price: { value: 3000, currency: "EUR" } }],
-            totalPrice: { value: 3000, currency: "EUR" },
-          },
+          payload: { orderedItem: [{ productId: card, quantity: 1 }] },
           contact: { email: "rita@example.com" },
         }),
       }),
@@ -765,18 +762,16 @@ describe("when Stripe does not make the link", () => {
 
 /* --- after review -------------------------------------------------------------------- */
 
-/** An order of the customer's through the public door, in any currency, not yet accepted. */
+/** An order of the customer's through the public door, in any currency, not yet accepted: for a product it sells. */
 async function orderIn(s: S, value: number, currency = "EUR") {
+  const product = await aProduct(s.db, { name: "Colour and cut", value, currency });
   const made = await confirmed(
     (r) => s.inbox.app.request(r),
     new Request(`${BASE}/v1/orders`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        payload: {
-          orderedItem: [{ name: "Colour and cut", quantity: 1, price: { value, currency } }],
-          totalPrice: { value, currency },
-        },
+        payload: { orderedItem: [{ productId: product, quantity: 1 }] },
         contact: { name: "Rita", email: "rita@example.com", locale: "en" },
       }),
     }),
@@ -984,11 +979,36 @@ describe("what the platform's page says", () => {
     await drain(s, 60_000);
     const ref = id.slice(-6).toUpperCase();
     const [link] = [...s.stripe.links.values()];
-    expect(link?.name).toBe(`Order ${ref}`);
+    // What it sells, by the business's own name for it, and the reference.
+    expect(link?.name).toBe(`Colour and cut (${ref})`);
     expect(link?.thanks).toBe(`Thank you for your payment for order ${ref}.`);
     expect(link?.inactive).toBe(
       `This link to pay is closed. Ana's Salon's latest email about order ${ref} says what is still to pay, if anything.`,
     );
+    // A line in a customer's own words (one the business's records hold: an assistant names only what the
+    // business sells, ADR-048) never reaches the platform's page: the order is named by its reference alone.
+    const theirs = await createItem(
+      s.db,
+      { actor: { kind: "customer_agent", id: "agent:rita", channel: "rest" }, tier: "anonymous", sandbox: false },
+      {
+        type: "order",
+        payload: {
+          orderedItem: [{ name: "Rita's hair, as she likes it", quantity: 1, price: { value: 4500, currency: "EUR" } }],
+          totalPrice: { value: 4500, currency: "EUR" },
+        },
+        contact: { name: "Rita", email: "rita@example.com", locale: "en" },
+      },
+    );
+    const accepted = await s.call(
+      "POST",
+      `/v1/owner/items/${theirs.view.item.id}/transitions`,
+      { event: "accept" },
+      s.owner,
+    );
+    expect(accepted.status, await accepted.clone().text()).toBe(200);
+    await drain(s, 60_000);
+    const other = theirs.view.item.id.slice(-6).toUpperCase();
+    expect([...s.stripe.links.values()].map((l) => l.name)).toContain(`Order ${other}`);
   });
 });
 

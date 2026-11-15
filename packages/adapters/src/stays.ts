@@ -49,16 +49,6 @@ async function run(fn: () => Promise<{ text: string; structured: unknown }>, not
   }
 }
 
-/** Whether the inbox takes stays at all: the stays tools are registered only then. */
-export async function takesStays(caps: Capabilities): Promise<boolean> {
-  const setup = await caps.stays.setup({
-    actor: { kind: "system", id: "doors", channel: "system" },
-    tier: "verified_principal",
-    sandbox: false,
-  });
-  return setup.properties.some((p) => p.active);
-}
-
 export const STAY_INSTRUCTIONS =
   "This is a place to stay. get_property gives its rooms, rates, policies and how it confirms; check_stay_availability gives what is free for dates and guests. A room marked instant comes with an offer: hold_stay holds it, and book_stay books it with the terms_sha your person confirmed. Other rooms are on request: request_stay sends the request, and the property answers with its own quote, which accept_offer takes with its terms_sha. Prices include every tax and fee. cancel_item on a confirmed stay answers with the fee first (fee_sha).";
 
@@ -117,7 +107,7 @@ export function registerPublicStayTools(server: McpServer, caps: Capabilities, c
     {
       title: "Request a stay",
       description:
-        "Send a request for these dates, rooms and guests to the property, which answers with its own quote. Needs the guest's contact and their consent. Keep the access_token: it reads, accepts and cancels this stay later.",
+        "Send a request for these dates, rooms and guests to the property, which answers with its own quote. Needs the guest's name and an email address or a phone number in contact, and their consent: ask them first, and send only what they agree to give the property; never make them up. Keep the access_token: it reads, accepts and cancels this stay later.",
       inputSchema: I.requestStayInput,
       annotations: writes,
     },
@@ -132,7 +122,7 @@ export function registerPublicStayTools(server: McpServer, caps: Capabilities, c
     {
       title: "Hold an instant room",
       description:
-        "Hold an instant room from check_stay_availability or quote_stay (offer_id) for the property's hold time, at its offer. Then book_stay with the terms_sha your person confirmed. A room that is not instant is refused: send request_stay instead.",
+        "Hold an instant room from check_stay_availability or quote_stay (offer_id) for the property's hold time, at its offer. Needs the guest's name and an email address or a phone number in contact: ask them first; never make them up. Then book_stay with the terms_sha your person confirmed. A room that is not instant is refused: send request_stay instead.",
       inputSchema: I.holdStayInput,
       annotations: writes,
     },
@@ -396,13 +386,23 @@ export function stayPublicRoutes(
   );
   app.post(
     "/stays",
-    describeRoute({ tags: ["stays"], summary: "Request a stay" }),
+    describeRoute({
+      tags: ["stays"],
+      summary: "Request a stay",
+      description:
+        "The property answers with its own quote. Needs contact: the guest's name, and an email address or a phone number.",
+    }),
     validator("json", I.requestStayInput, h),
     async (c) => created(c, await caps.stays.request(c.get("caller"), withIdem(c, c.req.valid("json")))),
   );
   app.post(
     "/stays/holds",
-    describeRoute({ tags: ["stays"], summary: "Hold an instant room" }),
+    describeRoute({
+      tags: ["stays"],
+      summary: "Hold an instant room",
+      description:
+        "Holds an instant room for the property's hold time, at its offer. Needs contact: the guest's name, and an email address or a phone number.",
+    }),
     validator("json", I.holdStayInput, h),
     async (c) => created(c, await caps.stays.hold(c.get("caller"), withIdem(c, c.req.valid("json")))),
   );

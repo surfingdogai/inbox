@@ -3,7 +3,7 @@ import { schema, ulid } from "@surfingdog/core";
 import { logMailOut } from "@surfingdog/platform";
 import { describe, expect, it } from "vitest";
 import { createApp, createInbox } from "../src/app";
-import { freshDb, futureDay, nextDay, openWeekdays, confirmed as sentConfirmed } from "./harness";
+import { aProduct, freshDb, futureDay, nextDay, openWeekdays, confirmed as sentConfirmed } from "./harness";
 
 const T0 = Date.parse("2026-09-21T10:00:00Z");
 
@@ -221,14 +221,12 @@ describe("REST door", () => {
     expect(detail.events.map((e) => e.event)).toEqual(["create", "confirm", "cancel_late"]);
 
     // An order's payment can fail, and the owner is offered what can follow.
+    const chain = await aProduct(db, { name: "Chain", value: 1500 });
     const order = (await (
       await sentConfirmed(
         (r) => app.request(r),
         jsonPost("/v1/orders", {
-          payload: {
-            orderedItem: [{ name: "Chain", quantity: 1, price: { value: 1500, currency: "EUR" } }],
-            totalPrice: { value: 1500, currency: "EUR" },
-          },
+          payload: { orderedItem: [{ productId: chain, quantity: 1 }] },
           contact: { email: "rita@example.com" },
         }),
       )
@@ -309,24 +307,50 @@ describe("REST door", () => {
     });
     expect(b.view.human).toContain("Our price is €100.00.");
 
-    const ordered = await sentConfirmed(
+    const stated = {
+      payload: {
+        orderedItem: [
+          {
+            sku: "SD-1",
+            name: "Saddle",
+            quantity: 1,
+            price: { value: 100, currency: "EUR" },
+            customerStatedPrice: { value: 15_000, currency: "EUR" },
+          },
+        ],
+        totalPrice: { value: 100, currency: "EUR" },
+        customerStatedPrice: { value: 15_000, currency: "EUR" },
+      },
+    };
+    // An order names what the business sells at its prices (ADR-048): a price of the assistant's own is refused,
+    // naming ours, while the business takes none.
+    const refused = await sentConfirmed((r) => app.request(r), jsonPost("/v1/orders", stated));
+    expect(refused.status).toBe(422);
+    const problem = (await refused.json()) as { detail: string; details: { reason: string } };
+    expect(problem.details.reason).toBe("price_not_ours");
+    expect(problem.detail).toContain("Saddle is €150.00 each");
+    // Left out, the business prices it.
+    const left = await sentConfirmed(
       (r) => app.request(r),
-      jsonPost("/v1/orders", {
-        payload: {
-          orderedItem: [
-            {
-              sku: "SD-1",
-              name: "Saddle",
-              quantity: 1,
-              price: { value: 100, currency: "EUR" },
-              customerStatedPrice: { value: 15_000, currency: "EUR" },
-            },
-          ],
-          totalPrice: { value: 100, currency: "EUR" },
-          customerStatedPrice: { value: 15_000, currency: "EUR" },
-        },
+      jsonPost("/v1/orders", { payload: { orderedItem: [{ sku: "SD-1", quantity: 1 }] } }),
+    );
+    expect(left.status).toBe(201);
+    const l = (await left.json()) as { view: { item: { payload: object } } };
+    expect(l.view.item.payload).toMatchObject({
+      orderedItem: [{ name: "Saddle", price: { value: 15_000, currency: "EUR" } }],
+      totalPrice: { value: 15_000, currency: "EUR" },
+    });
+    expect(l.view.item.payload).not.toHaveProperty("customerStatedPrice");
+    // Where the business takes a price of the customer's own (price counters), it is their offer, kept beside ours.
+    const counters = await app.request(
+      new Request("https://inbox.test/v1/owner/settings", {
+        method: "PUT",
+        headers: { ...owner, "content-type": "application/json" },
+        body: JSON.stringify({ doc: { negotiation: { priceCounters: true } } }),
       }),
     );
+    expect(counters.status, await counters.clone().text()).toBe(200);
+    const ordered = await sentConfirmed((r) => app.request(r), jsonPost("/v1/orders", stated));
     expect(ordered.status).toBe(201);
     const o = (await ordered.json()) as { view: { item: { id: string; payload: object } } };
     // What the request sent as a stated price is not the customer's to set: the inbox writes it.

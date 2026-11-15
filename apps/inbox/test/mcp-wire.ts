@@ -91,7 +91,8 @@ export const WIRE_CASES: readonly WireCase[] = [
       expect(status).toBe(200);
       const tools = listIn<{ name: string }>(m, "tools").map((t) => t.name);
       expect(tools).toContain("list_services");
-      expect(tools).toContain("create_booking");
+      // Listed on every inbox, whatever it takes (ADR-048): it carries the replies.
+      expect(tools).toContain("send_message");
     },
   },
   {

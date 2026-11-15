@@ -17,9 +17,17 @@ import type { z } from "zod";
 import type { Db } from "../db";
 import { methodsOf } from "../kitchen/settings";
 import { menuOf } from "../menu/schema";
-import type { ListingField, Settings, SetupSource } from "../settings/schema";
+import { business } from "../schema/tables";
+import {
+  type ListingField,
+  publishedDoorsElsewhere,
+  readSettings,
+  type Settings,
+  type SetupSource,
+} from "../settings/schema";
 import { lodgingProfile } from "../stays/public";
 import { listProperties, type PropertySetup, readSetup } from "../stays/store";
+import { WriteError } from "../write/errors";
 import { dateLocaliser, readClosures } from "./closures";
 
 /**
@@ -41,6 +49,12 @@ export const STAY_ROOM_OFFERED_SQL = `SELECT 1 FROM room_types r JOIN properties
   WHERE r.active = 1 AND r.offered = 1 AND p.active = 1
     AND NOT (COALESCE(json_extract(p.registration, '$.required'), 0) = 1 AND COALESCE(json_extract(p.registration, '$.number'), '') = '')
   LIMIT 1`;
+
+/**
+ * A product an order can name (ADR-048): on sale, at a fixed price. A row when there is one; a setup plan's
+ * dry run reads the same.
+ */
+export const FIXED_PRODUCT_SQL = "SELECT 1 FROM products WHERE active = 1 AND price_model = 'fixed' LIMIT 1";
 
 /**
  * The owner's switches for what agents can do (`settings.doors`). Left out, a door follows what the
@@ -69,7 +83,8 @@ export function doorSwitch(doors: DoorSwitches, type: ItemType): boolean | undef
  * - `booking`, with an active service booked at a time (not one asked about for a price, `quote`)
  *   that has weekly hours with at least one window (its own, or the business's when it has none of
  *   its own);
- * - `order`, with an active product;
+ * - `order`, with an active product at a fixed price (a catalogue priced on request takes requests for a
+ *   price alone, ADR-048);
  * - `quote_request`, with an active service or product to ask about, or switched on (`doors`);
  * - `refund`, with something paid to refund: an order, or a booking of a service with a price.
  *
@@ -86,7 +101,7 @@ export async function offeredItemTypes(
   elsewhere: readonly string[] = [],
   doors: DoorSwitches = {},
 ): Promise<ItemType[]> {
-  const [services, open, products, rooms] = await Promise.all([
+  const [services, open, products, fixedProducts, rooms] = await Promise.all([
     db.client.query({ sql: "SELECT id, price FROM services WHERE active = 1", params: [], method: "all" }),
     db.client.query({
       sql: "SELECT service_id, weekly FROM availability_rules WHERE kind = 'open'",
@@ -94,6 +109,7 @@ export async function offeredItemTypes(
       method: "all",
     }),
     db.client.query({ sql: "SELECT 1 FROM products WHERE active = 1 LIMIT 1", params: [], method: "all" }),
+    db.client.query({ sql: FIXED_PRODUCT_SQL, params: [], method: "all" }),
     db.client.query({ sql: STAY_ROOM_OFFERED_SQL, params: [], method: "all" }),
   ]);
   const base = open.rows.find((r) => r[0] === null || r[0] === undefined);
@@ -108,7 +124,8 @@ export async function offeredItemTypes(
       if ((json(r[1]) as { model?: unknown } | null)?.model === "quote") return false;
       return hasWindows(own.has(id) ? own.get(id) : base?.[1]);
     });
-  const orderable = !elsewhere.includes("order") && products.rows.length > 0;
+  // An assistant's order names products sold at a fixed price (ADR-048): one priced on request is asked about.
+  const orderable = !elsewhere.includes("order") && fixedProducts.rows.length > 0;
   const priced = services.rows.some((r) => {
     const model = (json(r[1]) as { model?: unknown } | null)?.model;
     return model === "fixed" || model === "from";
@@ -123,6 +140,51 @@ export async function offeredItemTypes(
   if (orderable || (bookable && priced)) offered.add("refund");
   if (!elsewhere.includes("stay") && doors.stay !== false && rooms.rows.length > 0) offered.add("stay");
   return ITEM_TYPES.filter((t) => offered.has(t));
+}
+
+/**
+ * What this business takes here, as its manifest and profile publish it: `offeredItemTypes`, with the doors
+ * elsewhere it publishes (`publishedDoorsElsewhere`). The doors refuse an assistant's request of any other
+ * kind from the same set (ADR-048), so what an agent reads and what it meets never differ.
+ */
+export async function publishedItemTypes(db: Db): Promise<ItemType[]> {
+  const [[row], s] = await Promise.all([
+    db.orm.select({ domain: business.domain }).from(business).limit(1),
+    readSettings(db),
+  ]);
+  const elsewhere = publishedDoorsElsewhere(s.doorsElsewhere, [row?.domain, s.directory.url]);
+  return offeredItemTypes(
+    db,
+    elsewhere.map((d) => d.item_type),
+    s.doors,
+  );
+}
+
+const KIND_WORDS: Record<ItemType, string> = {
+  message: "messages",
+  quote_request: "requests for a price",
+  booking: "bookings",
+  order: "orders",
+  refund: "refunds",
+  stay: "stays",
+};
+
+/**
+ * The refusal of an assistant's request of a kind this business does not take here (ADR-048), naming what it
+ * does take: `403 not_allowed`, `details.reason` `<kind>_not_offered`, with the item types it takes.
+ */
+export function notOffered(
+  kind: "booking" | "quote_request" | "order" | "stay",
+  offered: readonly ItemType[],
+): WriteError {
+  const takes = offered.filter((t) => t !== kind && t !== "refund").map((t) => KIND_WORDS[t]);
+  const list = takes.length > 1 ? `${takes.slice(0, -1).join(", ")} and ${takes[takes.length - 1]}` : (takes[0] ?? "");
+  const yet = kind === "booking" || kind === "stay" ? " yet" : "";
+  return new WriteError(
+    "not_allowed",
+    `We take no ${KIND_WORDS[kind]} here${yet}.${list ? ` What we take here: ${list} (item_types in get_business_profile).` : ""} Nothing was written.`,
+    { details: { reason: `${kind}_not_offered`, item_type: kind, item_types: [...offered] } },
+  );
 }
 
 /**

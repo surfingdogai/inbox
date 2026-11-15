@@ -311,6 +311,32 @@ describe("a setup plan", () => {
     expect((await readSettings(db)).doorsElsewhere).toEqual([{ itemType: "order", url: CHECKOUT }]);
   });
 
+  it("expects no orders of a catalogue priced on request: it takes requests for a price alone (ADR-048)", async () => {
+    const { caps } = await setup();
+    await caps.setup.createProduct(owner, { name: "Wedding cake", price_model: "quote", active: true });
+    await caps.setup.createProduct(owner, {
+      name: "Birthday cake",
+      price: { value: 3_500, currency: "EUR" },
+      price_model: "from",
+      active: true,
+    });
+    const plan: SetupPlanInput = { profile: { name: "Bolo Bom" }, doors: ["message", "quote_request", "order"] };
+    const dry = await caps.applySetupPlan(owner, plan, { dryRun: true });
+    expect(dry.doors).toEqual({
+      on: ["message", "quote_request"],
+      expected: ["message", "quote_request", "order"],
+      missing: [
+        {
+          door: "order",
+          why: "Orders turn on once there is a product with a fixed price on offer, which you add in the app.",
+        },
+      ],
+    });
+    // As the inbox has it, applied: the plan and the inbox give the same answer.
+    expect((await caps.applySetupPlan(system, plan)).doors).toEqual(dry.doors);
+    expect((await caps.getBusinessProfile()).item_types).toEqual(["message", "quote_request"]);
+  });
+
   it("sets up a place to stay: its rules, nothing confirming on its own, and the stay door once it has a room", async () => {
     const { db, caps } = await setup();
     const aurora: SetupPlanInput = {

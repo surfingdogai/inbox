@@ -453,6 +453,8 @@ export function publicRest(caps: Capabilities, opts: { readonly baseUrl?: string
     describeRoute({
       tags: ["public"],
       summary: "Request a quote",
+      description:
+        "Ask for a price on something custom, or on a service or product priced on request. Needs contact: your person's name, and an email address or a phone number, as they agreed to give them (422 invalid_input, details.reason client_details, without them). An assistant's request is refused while the business takes none here (403 not_allowed, details.reason quote_request_not_offered, with the item_types it takes).",
       responses: json("Created", R.createResultSchema, 201),
     }),
     validator("json", requestQuoteInput, hook),
@@ -464,6 +466,8 @@ export function publicRest(caps: Capabilities, opts: { readonly baseUrl?: string
     describeRoute({
       tags: ["public"],
       summary: "Request a booking",
+      description:
+        "Request a service at a time, after GET /v1/availability. Needs contact (422 client_details without it). Refused while the business takes no bookings here (403 booking_not_offered).",
       responses: json("Created", R.createResultSchema, 201),
     }),
     validator("json", createBookingInput, hook),
@@ -475,6 +479,8 @@ export function publicRest(caps: Capabilities, opts: { readonly baseUrl?: string
     describeRoute({
       tags: ["public"],
       summary: "Place an order",
+      description:
+        "Each line names a product the business sells at a fixed price (productId, or sku, from GET /v1/products); leave price and totalPrice out and the business prices the order in its currency. Needs contact. Refused before anything is written: 422 product_missing, unknown_product, not_on_sale, not_priced (ask with POST /v1/quotes), currency_not_ours, price_not_ours and total_not_ours (unless price_negotiable), client_details; 403 order_not_offered.",
       responses: json("Created", R.createResultSchema, 201),
     }),
     validator("json", createOrderInput, hook),
@@ -752,6 +758,8 @@ export function publicRest(caps: Capabilities, opts: { readonly baseUrl?: string
     describeRoute({
       tags: ["public"],
       summary: "Send a message, or reply on your item",
+      description:
+        "Start a conversation, or reply on your item with item_id. A new conversation needs contact (name, and email or phone); a reply needs none.",
       responses: json("Created", R.createResultSchema, 201),
     }),
     validator("json", sendMessageInput, hook),

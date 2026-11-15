@@ -489,7 +489,10 @@ describe("idempotency on every owner write", () => {
     const n8n = await mintKey(app, owner, { name: "n8n", preset: "automation" });
     const asN8n = { authorization: `Bearer ${n8n.key}` };
     const started = await app.request(
-      req("POST", "/v1/messages", { body: "Do you sell Brooks saddles?", contact: { name: "João" } }),
+      req("POST", "/v1/messages", {
+        body: "Do you sell Brooks saddles?",
+        contact: { name: "João", email: "joao@example.com" },
+      }),
     );
     const id = ((await started.json()) as { view: { item: { id: string } } }).view.item.id;
     const reply = { body: "Thanks, we got it.", written_by: "automation" };

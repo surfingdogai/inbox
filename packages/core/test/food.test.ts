@@ -150,17 +150,19 @@ async function dish(
   return s.caps.food.confirmAllergens(person(t), { product_id: row.id, fingerprint: item.fingerprint as string });
 }
 
+/**
+ * A line as an assistant sends it (ADR-048): the product and how many. The name and the price a test writes beside
+ * them are what an assistant might have guessed; the catalogue names and prices each line, so they are left out.
+ */
 const line = (
   id: string,
-  name: string,
+  _name: string,
   quantity: number,
-  price: { value: number; currency: string },
+  _price: { value: number; currency: string },
   extra: Record<string, unknown> = {},
 ) => ({
   productId: id,
-  name,
   quantity,
-  price,
   ...extra,
 });
 
@@ -172,7 +174,6 @@ const order = (
   ({
     payload: {
       orderedItem: lines,
-      totalPrice: { value: 1, currency: lines[0]?.price.currency ?? "EUR" },
       fulfil,
       ...extra,
     },
@@ -1215,6 +1216,8 @@ describe("what an order is checked for, before it is taken", () => {
   it("an item off sale is refused even by its id, though get_menu hides it", async () => {
     const s = await volcan();
     const pizza = await dish(s, VOLCAN_T, { name: "Pizza al pastor", price: 18900, currency: "MXN", menu: PIZZA });
+    // Something else is still on sale, so the kitchen takes orders (ADR-048).
+    await dish(s, VOLCAN_T, { name: "Agua de jamaica", price: 3500, currency: "MXN", menu: { section: "bebidas" } });
     await s.db.client.query({
       sql: "UPDATE products SET active = 0 WHERE id = ?",
       params: [pizza.product.id],
@@ -1227,8 +1230,10 @@ describe("what an order is checked for, before it is taken", () => {
         order([line(pizza.product.id, "Pizza", 1, MXN(1))], { method: "pickup", slot: { start: slot } }),
       ),
     );
-    expect(e.details?.reason).toBe("not_available");
-    expect(e.message).toBe("Pizza al pastor is not on sale now.");
+    // Refused with the order's other lines' checks, before the kitchen is asked.
+    expect(e.details?.reason).toBe("not_on_sale");
+    expect(e.message).toBe("A line is for a product we no longer sell, so it cannot be ordered. Nothing was written.");
+    expect(e.fields).toEqual([{ path: "payload.orderedItem.0", problem: "invalid", message: "not on sale" }]);
   });
 
   it("the zone's minimum counts what the options add", async () => {

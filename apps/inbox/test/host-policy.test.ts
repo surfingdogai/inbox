@@ -40,6 +40,8 @@ async function setup() {
         business: { name: "Oficina Maré" },
         notifications: { ownerEmail: "owner@oficinamare.pt" },
         email: { fromAddress: "owner@personal.example", fromName: "Someone else", replyTo: "reply@personal.example" },
+        // It lists nothing yet, and takes requests for a price in their own words (ADR-048).
+        doors: { quoteRequest: true },
       },
     },
   );

@@ -147,15 +147,12 @@ describe("a booking door the business keeps at a booking platform", () => {
     expect(times.status).toBe(403);
     expect(await times.json()).toMatchObject({ details: { url: BOOKING } });
 
+    // On MCP the booking tools are not listed at all (ADR-048), and the server's instructions name where to go.
     const agent = await s.mcp();
-    for (const [name, args] of [
-      ["create_booking", asked],
-      ["check_availability", { service_id: s.service, from: `${DAY}T00:00:00Z`, to: `${DAY}T23:59:00Z` }],
-    ] as const) {
-      const r = await agent.callTool({ name, arguments: args });
-      expect(r.isError, name).toBe(true);
-      expect(JSON.stringify(r.content), name).toContain(BOOKING);
-    }
+    const names = (await agent.listTools()).tools.map((t) => t.name);
+    expect(names).not.toContain("create_booking");
+    expect(names).not.toContain("check_availability");
+    expect(agent.getInstructions()).toContain(`This business takes bookings at ${BOOKING}, not here`);
     await agent.close();
 
     // The page sends a visitor on, whether they open the booking form or send it.

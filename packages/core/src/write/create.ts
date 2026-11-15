@@ -11,6 +11,7 @@ import {
   itemFlagsSchema,
   payloadSchemas,
   type ReturnTerms,
+  requestSchemaOf,
 } from "../domain/types";
 import { type IdentityInput, identityColumns, identityStatements, planMatch } from "../identity/match";
 import { networksStopped, stopFollowsStatements, stopViaOf } from "../identity/stops";
@@ -202,7 +203,11 @@ export async function createItem(
           ),
         )
       : input.payload;
-  const parsed = schema.safeParse(adds ? { ...(sent as Record<string, unknown>), ...adds.payload } : sent);
+  // A customer's order may leave its lines' names and prices, and its total, to the catalogue (ADR-048): it is
+  // read as its request may send it, priced below, and what is stored is read again strictly.
+  const parsed = requestSchemaOf(input.type, isCustomer(caller)).safeParse(
+    adds ? { ...(sent as Record<string, unknown>), ...adds.payload } : sent,
+  );
   if (!parsed.success) throw fromZod(parsed.error, "payload");
 
   const idem = caller.idempotency;

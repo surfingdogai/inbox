@@ -158,7 +158,12 @@ describe("scopes refused out of the box", () => {
     const n8n = { authorization: `Bearer ${((await minted.json()) as { key: string }).key}` };
 
     // A message and a booking, as the webhook would announce them.
-    const message = await call("POST", "/v1/messages", {}, { body: "Open on Sunday?", contact: { name: "João" } });
+    const message = await call(
+      "POST",
+      "/v1/messages",
+      {},
+      { body: "Open on Sunday?", contact: { name: "João", email: "joao@example.com" } },
+    );
     const messageId = ((await message.json()) as { view: { item: { id: string } } }).view.item.id;
     const booking = await call(
       "POST",

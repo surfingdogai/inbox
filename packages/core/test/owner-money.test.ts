@@ -6,7 +6,7 @@ import { createDb } from "../src/db";
 import { ulid } from "../src/ids";
 import { MIGRATIONS } from "../src/schema/migrations.generated";
 import { business, items, products, services } from "../src/schema/tables";
-import { type Caller, WriteError } from "../src/write/index";
+import { type Caller, createItem, WriteError } from "../src/write/index";
 import { confirming, makeClient, openWeekdays, resetTables } from "./harness";
 
 /**
@@ -131,7 +131,9 @@ describe("the owner's AI and the customer's price", () => {
 
   it("never accepts an order with a line the customer priced; the owner can", async () => {
     const s = await setup();
-    const order = await s.caps.createOrder(customer, {
+    // A line naming no product, as the business's own records hold one: an assistant names only what it sells (ADR-048).
+    const order = await createItem(s.db, customer, {
+      type: "order",
       payload: { orderedItem: [{ name: "Child seat", quantity: 1, price: EUR(100) }], totalPrice: EUR(100) },
     });
     const e = await refusal(s.caps.transitionItem(ai, { item_id: order.view.item.id, event: "accept" }));

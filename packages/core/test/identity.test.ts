@@ -18,7 +18,7 @@ import { availabilityRules, items, jobs, parties, products, rules, services } fr
 import { readSettings } from "../src/settings/schema";
 import { WriteError } from "../src/write/errors";
 import type { Caller } from "../src/write/index";
-import { confirming, makeClient, resetTables } from "./harness";
+import { aProduct, confirming, makeClient, resetTables } from "./harness";
 
 /**
  * Customers the business already knows (ADR-017 §8.2) and the rules that may read a standing
@@ -321,11 +321,9 @@ describe("customers the business already knows (§8.2)", () => {
       await caps.transitionItem(owner(T0 + 2 * MIN), { item_id: id, event: "confirm" });
       await caps.transitionItem(owner(T0 + 3 * MIN), { item_id: id, event: end });
     }
+    const oil = await aProduct(caps, { name: "Oil", value: 4200 });
     const order = await caps.createOrder(customer(T0 + 4 * MIN), {
-      payload: {
-        orderedItem: [{ name: "Oil", quantity: 1, price: { value: 4200, currency: "EUR" } }],
-        totalPrice: { value: 4200, currency: "EUR" },
-      },
+      payload: { orderedItem: [{ productId: oil, quantity: 1 }] },
       contact: { email: "ana@example.pt" },
     });
     await caps.transitionItem(owner(T0 + 5 * MIN), { item_id: order.view.item.id, event: "accept" });

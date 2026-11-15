@@ -221,12 +221,12 @@ describe("what the check is sent", () => {
     const s = await spamSetup({ filters: ["pitches"], judge });
     await s.caps.sendMessage(agent(T0), {
       body: "Please call me on +351 912 345 678 or write to maria.lopez@empresa.example\nI would like to book the latte art class for my team next month, around twelve people.",
-      contact: { name: "maria.lopez@empresa.example", email: "maria.lopez@empresa.example" },
+      contact: { name: "María López", email: "maria.lopez@empresa.example" },
     });
     await s.drain(T0 + MIN);
     const user = judge.calls[0]?.user ?? "";
     expect(user).not.toMatch(/912 345 678|maria\.lopez@/);
-    expect(user).toContain('From: "[email]" at empresa.example');
+    expect(user).toContain('From: "María López" at empresa.example');
   });
 });
 

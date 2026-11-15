@@ -239,10 +239,7 @@ async function refused(p: Promise<unknown>): Promise<WriteError> {
 /** A priced order through the confirm step: the summary the customer saw, then the order confirmed. */
 async function confirmedOrder(s: Setup, c: Country, productId: string = s.chain) {
   const input = {
-    payload: {
-      orderedItem: [{ productId, name: "x", quantity: 1, price: s.money(1) }],
-      totalPrice: s.money(1),
-    },
+    payload: { orderedItem: [{ productId, quantity: 1 }] },
     contact: { name: "Rita", email: "rita@example.com", locale: c.locale },
   };
   const asked = await refused(s.caps.createOrder(anon(), input));
@@ -422,7 +419,7 @@ describe("before an order or a booking binds, and in its first confirmation", ()
             startTime: iso(start),
             endTime: iso(start + 90 * 60_000),
           },
-          contact: { email: "rita@example.com", locale: c.locale },
+          contact: { name: "Rita", email: "rita@example.com", locale: c.locale },
         }),
       );
       expect(asked.code).toBe("confirm_terms");
@@ -822,10 +819,7 @@ describe("a contract keeps the law it was asked for under", () => {
   it("a summary read before the business moved and said yes to after it is shown again; in the EU the yes binds", async () => {
     const s = await setup({ ...usa, country: "" });
     const input = {
-      payload: {
-        orderedItem: [{ productId: s.chain, name: "x", quantity: 1, price: s.money(1) }],
-        totalPrice: s.money(1),
-      },
+      payload: { orderedItem: [{ productId: s.chain, quantity: 1 }] },
       contact: { name: "Rita", email: "rita@example.com", locale: "en" },
     };
     const first = (await refused(s.caps.createOrder(anon(), input))).details as { summary: string; terms_sha: string };
@@ -845,10 +839,7 @@ describe("a contract keeps the law it was asked for under", () => {
     const d = await setup(member);
     const order = {
       ...input,
-      payload: {
-        orderedItem: [{ productId: d.chain, name: "x", quantity: 1, price: d.money(1) }],
-        totalPrice: d.money(1),
-      },
+      payload: { orderedItem: [{ productId: d.chain, quantity: 1 }] },
     };
     const sha = ((await refused(d.caps.createOrder(anon(), order))).details as { terms_sha: string }).terms_sha;
     await moveTo(d, "AT");

@@ -194,7 +194,9 @@ describe("people at the doors", () => {
       post("/v1/bookings", { payload: booking(s.svc, 2), contact: { name: "Ana Silva", email: "ana@example.pt" } }),
     );
     const weak = (await (
-      await s.app.request(post("/v1/bookings", { payload: booking(s.svc, 3), contact: { email: "ana@example.pt" } }))
+      await s.app.request(
+        post("/v1/bookings", { payload: booking(s.svc, 3), contact: { name: "Ana", email: "ana@example.pt" } }),
+      )
     ).json()) as Created;
     expect(weak.identity).toMatchObject({ recognised: "weak", verify: { available: true } });
     const sent = await s.app.request(
@@ -252,7 +254,7 @@ describe("people at the doors", () => {
       });
       return { headers: { "content-type": "application/json", ...signed.headers }, body };
     };
-    const body = JSON.stringify({ payload: booking(s.svc), contact: { email: "sig@example.com" } });
+    const body = JSON.stringify({ payload: booking(s.svc), contact: { name: "Rui Costa", email: "sig@example.com" } });
     const good = await make(body, { "Idempotency-Key": "k-1" });
     const first = await s.app.request(new Request(`${ORIGIN}/v1/bookings`, { method: "POST", ...good }));
     expect(first.status).toBe(201);
@@ -370,7 +372,7 @@ describe("what a copy and the business cannot get (security review)", () => {
     // still a copy when it comes from anyone but the sender (another client here), never a second item.
     const withKey = JSON.stringify({
       payload: booking(s.svc),
-      contact: { email: "sig@example.com" },
+      contact: { name: "Rui Costa", email: "sig@example.com" },
       idempotency_key: "b-1",
     });
     const h1 = await signedBooking(key, withKey);
@@ -384,7 +386,10 @@ describe("what a copy and the business cannot get (security review)", () => {
     expect(await count()).toBe(1);
 
     // No key at first: a copy that adds an Idempotency-Key header of its own is still a copy.
-    const bare = JSON.stringify({ payload: booking(s.svc, 3), contact: { email: "sig@example.com" } });
+    const bare = JSON.stringify({
+      payload: booking(s.svc, 3),
+      contact: { name: "Rui Costa", email: "sig@example.com" },
+    });
     const h2 = await signedBooking(key, bare);
     expect((await send(s.app, h2, bare)).status).toBe(201);
     const added = await send(s.app, h2, bare, { "Idempotency-Key": "fresh" });
@@ -392,7 +397,10 @@ describe("what a copy and the business cannot get (security review)", () => {
     expect(await count()).toBe(2);
 
     // The key in the header: a retry must carry the same one.
-    const hdr = JSON.stringify({ payload: booking(s.svc, 4), contact: { email: "sig@example.com" } });
+    const hdr = JSON.stringify({
+      payload: booking(s.svc, 4),
+      contact: { name: "Rui Costa", email: "sig@example.com" },
+    });
     const h3 = await signedBooking(key, hdr);
     expect((await send(s.app, h3, hdr, { "Idempotency-Key": "k-3" })).status).toBe(201);
     expect((await send(s.app, h3, hdr, { "Idempotency-Key": "k-3" })).status).toBe(200);

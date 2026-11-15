@@ -1,6 +1,9 @@
 import {
   type Caller,
   type Capabilities,
+  clientEmail,
+  clientName,
+  clientPhone,
   type Db,
   fillStayTemplate,
   formatMinor,
@@ -1188,8 +1191,6 @@ export function subjectOf(
   };
 }
 
-const EMAIL = /^[^@\s<>"]+@[^@\s<>"]+\.[^@\s<>"]+$/;
-
 /** Who the property books the stay for: the lead's name and how to reach them, and the others' names. */
 export interface Lead {
   readonly name: string;
@@ -1201,39 +1202,44 @@ export interface Lead {
 /**
  * The lead UCP requires before a session is ready: a booker named and reachable, a primary guest named and
  * reachable, or a booker who is reachable with a primary guest who is named. Null when there is none yet;
- * a message when an address cannot be one. Guests' ids are only matched here, never kept.
+ * a message when an address cannot be one. Guests' ids are only matched here, never kept. A name, an address
+ * and a number are judged as every door judges a client's details (ADR-048), so a lead taken here is never
+ * refused when the stay is held.
  */
 export function leadOf(req: UcpSessionRequest): Lead | null | { messages: UcpMessage[] } {
   const full = (p?: { first_name?: string | undefined; last_name?: string | undefined }) =>
     p?.first_name && p.last_name ? `${p.first_name} ${p.last_name}` : null;
+  /** The lead's name, as every door judges a client's (ADR-048); the other guests' are kept as they came. */
+  const named = (p?: { first_name?: string | undefined; last_name?: string | undefined }) => clientName(full(p));
   for (const [where, email] of [
     ["$.booker.email", req.booker?.email],
     ...(req.guests ?? []).map((g, i) => [`$.guests[${i}].email`, g.email] as const),
   ] as const) {
-    if (email && !EMAIL.test(email))
+    if (email && !clientEmail(email))
       return { messages: [error("invalid", "Not an email address.", "recoverable", where)] };
   }
   const primaryIds = new Set(
     req.stays.flatMap((s) => (s.guest_assignments ?? []).filter((a) => a.role === "primary").map((a) => a.guest_id)),
   );
-  const primary = (req.guests ?? []).find((g) => primaryIds.has(g.id) && full(g));
-  const reach = (p?: { email?: string | undefined; phone_number?: string | undefined }) =>
-    p?.email || p?.phone_number
-      ? { ...(p.email ? { email: p.email } : {}), ...(p.phone_number ? { phone: p.phone_number } : {}) }
-      : null;
+  const primary = (req.guests ?? []).find((g) => primaryIds.has(g.id) && named(g));
+  const reach = (p?: { email?: string | undefined; phone_number?: string | undefined }) => {
+    const email = clientEmail(p?.email);
+    const phone = clientPhone(p?.phone_number);
+    return email || phone ? { ...(email ? { email } : {}), ...(phone ? { phone } : {}) } : null;
+  };
   const others = (req.guests ?? [])
     .filter((g) => g !== primary)
     .map((g) => full(g))
     .filter((n): n is string => !!n);
-  const bookerName = full(req.booker);
+  const bookerName = named(req.booker);
   const bookerReach = reach(req.booker);
   if (primary && reach(primary)) {
-    return { name: full(primary) as string, ...(reach(primary) as object), others };
+    return { name: named(primary) as string, ...(reach(primary) as object), others };
   }
   if (bookerName && bookerReach) {
-    return { name: primary ? (full(primary) as string) : bookerName, ...bookerReach, others };
+    return { name: primary ? (named(primary) as string) : bookerName, ...bookerReach, others };
   }
-  if (primary && bookerReach) return { name: full(primary) as string, ...bookerReach, others };
+  if (primary && bookerReach) return { name: named(primary) as string, ...bookerReach, others };
   return null;
 }
 
