@@ -30,6 +30,10 @@ describe("what is said of a new request's client", () => {
       "Before you send anything new here, ask your person for their name and an email address or a phone number",
     );
     expect(read(REST)).toContain("Needs contact: your person's name, and an email address or a phone number");
+    // The guide says the details are required, and the docs say what a detail is, letters in a phone included.
+    expect(read(AGENTS)).toContain("The person's details are required: every new request carries their name");
+    expect(read(API)).toContain("a phone number has 6 to 20 digits and no letters (no extension)");
+    expect(read(API)).not.toContain("or any other client of these doors");
   });
 
   it("never calls the contact optional", () => {

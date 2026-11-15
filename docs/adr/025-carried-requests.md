@@ -48,9 +48,12 @@ middle. A carried request has to keep the substance of that promise, and say pla
    manifest on its own domain (or one short label under it), through that inbox's public API. Carrying
    to a business without an inbox comes later, if ever, and then only to a business that claimed its
    listing and opted in.
-7. **An email address, never a phone number.** The person's contact is the email address they agreed
-   to give the business (`consent: true`), and their name ([ADR-048](048-client-details-and-real-orders.md)).
-   A phone number is refused in the contact and in the words.
+7. **A name and an email address, never a phone number.** The person's contact is their name and the email
+   address they agreed to give the business (`consent: true` covers both). A phone number is refused in the
+   contact and in the words.
+
+   > Amended by [ADR-048](048-client-details-and-real-orders.md) (15 November 2026): the name, once optional,
+   > is required (spec 0.18), and is a name as an inbox takes one.
 8. **Only the verified owner sees what assistants tried.** The network keeps one record per attempt
    (when, which business, which kind, the outcome, the inbox's status code: no sender, no contact, no
    words, no item id), for 400 days. A member's inbox alone is told the last 30 days' counts, in the

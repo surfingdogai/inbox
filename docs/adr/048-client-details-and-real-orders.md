@@ -95,9 +95,11 @@ The founder's, 15 November 2026:
 - ADR-018 §3.2, Q5: "nothing is refused" holds for the business's own writes and the owner's AI. An assistant's
   order line naming no product, or a product priced from, as a range or on request, is refused, and so is a price
   not the business's while price counters (Q1) are off; with them on it is the customer's offer, as before.
-- ADR-025, decision 7: the person's contact is their name and the email address they agreed to give.
+- ADR-025, decision 7: the person's contact is their name and the email address they agreed to give (its
+  heading says so, with a note).
 - ADR-017 R26, step 3: the person's details are required: a name, and an email or a phone.
-- ADR-044 §2: a kind the business does not take is refused as a time it does not offer is.
+- ADR-044 §2: a kind the business does not take is refused as a time it does not offer is (a note there points
+  here).
 - ADR-029 decision 7 stands: orders are still made at the business's own door.
 
 ## Consequences

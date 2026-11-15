@@ -529,8 +529,9 @@ is in here, so it is worth doing properly. Ask the person for each; do not inven
 5. **Rules** — start from a preset (`appointments`, `trades`, `shop`, `stays`) and change it with them.
 
 The inbox offers agents only what it has the means to do: `message` always, `booking` once a service
-has opening hours, `order` once a product is active, and `quote_request` with either. So set up what
-fits the business, and nothing else:
+has opening hours, `order` once a product is on sale at a fixed price in the business's currency (a product
+priced on request is asked about, never ordered), and `quote_request` with either. So set up what fits the
+business, and nothing else:
 
 - **Takes bookings** (a salon, a clinic, a trade, a restaurant's tables): services with their hours.
 - **A shop that takes orders through the inbox**: its products, or a product feed. For each order the
