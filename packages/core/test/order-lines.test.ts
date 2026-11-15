@@ -467,3 +467,58 @@ describe("the business's own orders", () => {
     expect(key.view.item.payload).toMatchObject({ orderedItem: [line], totalPrice: EUR(100) });
   });
 });
+
+describe("an assistant's request for a price", () => {
+  it("names a product or a service the business has, if any, and a budget in its currency", async () => {
+    const s = await setup();
+    const service = ulid();
+    await s.db.orm.insert(services).values({
+      id: service,
+      name: "Wheel rebuild",
+      durationMin: 60,
+      price: { model: "quote" },
+      createdAt: T0,
+      updatedAt: T0,
+    });
+    const ask = (payload: Record<string, unknown>) => s.caps.requestQuote(agent, { payload } as never);
+    // As the third item of the incident came: a product nobody sells, a budget the sender chose.
+    const bogus = await refused(
+      ask({
+        itemOffered: { name: "audit-fixturex", productId: "nope-not-a-product" },
+        description: "audit-fixturex",
+        budget: AUD(1),
+      }),
+    );
+    expect(bogus.details).toEqual({ reason: "unknown_product" });
+    expect(bogus.fields).toEqual([
+      { path: "payload.itemOffered.productId", problem: "invalid", message: "no such product here" },
+    ]);
+    const sku = await refused(ask({ itemOffered: { name: "Bell", sku: "NOPE-1" }, description: "A loud one" }));
+    expect(sku.fields?.[0]?.path).toBe("payload.itemOffered.sku");
+    const nothing = await refused(
+      ask({ itemOffered: { name: "Truing", serviceId: "no-such-service" }, description: "Front wheel" }),
+    );
+    expect(nothing.details).toEqual({ reason: "unknown_service" });
+    const budget = await refused(
+      ask({ itemOffered: { name: "Wheel rebuild", serviceId: service }, description: "Rear", budget: AUD(30_000) }),
+    );
+    expect(budget.details).toEqual({ reason: "currency_not_ours", currency: "EUR" });
+    expect(budget.message).toBe(
+      "Our prices are in EUR: give your person's budget in EUR, or leave it out. Nothing was written.",
+    );
+    const range = await refused(
+      ask({ itemOffered: { name: "Wheel rebuild" }, description: "Rear", job: { budgetMax: AUD(50_000) } }),
+    );
+    expect(range.fields?.[0]?.path).toBe("payload.job.budgetMax.currency");
+    expect(await s.count()).toBe(0);
+    // Ours, or in the person's own words: taken.
+    for (const itemOffered of [
+      { name: "Wheel rebuild", serviceId: service },
+      { name: "Saddle", productId: s.saddle },
+      { name: "A child seat for a cargo bike" },
+    ]) {
+      const r = await ask({ itemOffered, description: "As soon as you can", budget: EUR(20_000) });
+      expect(r.view.item.type).toBe("quote_request");
+    }
+  });
+});

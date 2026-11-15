@@ -35,7 +35,7 @@ import { clientRequired, requireClient } from "../write/client";
 import { findIdempotent, threadEntryStatement } from "../write/common";
 import { ACKNOWLEDGED, type CreateInput, type CreateResult, type CreateScreener, createItem } from "../write/create";
 import { WriteError } from "../write/errors";
-import { checkBookingPrice, checkOrderLines } from "../write/pricing";
+import { checkBookingPrice, checkOrderLines, checkQuoteRequest } from "../write/pricing";
 import { askDoor, notOffered, publishedItemTypes } from "./directory";
 
 /**
@@ -187,14 +187,15 @@ export class IdentityCapabilities {
 
   /**
    * An assistant's new request as the business takes it (ADR-048), as each door checks it first: a kind it
-   * takes here (`publishedItemTypes`), an order's lines (`checkOrderLines`) and a booking's total
-   * (`checkBookingPrice`). Throws the refusal, in the same words as the door's.
+   * takes here (`publishedItemTypes`), what a request for a price names (`checkQuoteRequest`), an order's lines
+   * (`checkOrderLines`) and a booking's total (`checkBookingPrice`). Throws the refusal, in the door's words.
    */
   private async refuseAssistantRequest(caller: Caller, input: CreateInput, now: number): Promise<void> {
     const kind = input.type;
     if (kind !== "booking" && kind !== "quote_request" && kind !== "order" && kind !== "stay") return;
     const offered = await publishedItemTypes(this.db, now);
     if (!offered.includes(kind)) throw notOffered(kind, offered);
+    if (kind === "quote_request") await checkQuoteRequest(this.db, input.payload);
     if (kind !== "order" && kind !== "booking") return;
     const counters = (await readSettings(this.db)).negotiation.priceCounters;
     if (kind === "order") {

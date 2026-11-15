@@ -24,7 +24,7 @@ export {
   pruneIdempotencyKeys,
   strongIdempotencyKey,
 } from "./idempotency";
-export { checkBookingPrice, checkOrderLines } from "./pricing";
+export { checkBookingPrice, checkOrderLines, checkQuoteRequest } from "./pricing";
 export { bucketsFor, MAX_BUCKETS } from "./slots";
 export { appendThreadEntry } from "./thread";
 export { type TransitionInput, type TransitionResult, transitionItem } from "./transition";

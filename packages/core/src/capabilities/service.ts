@@ -168,7 +168,7 @@ import {
 import { type OnceOptions, type OnceResult, once } from "../write/idempotency";
 import { heldReplyStatements, namesOtherMoney } from "../write/limits";
 import { isAutomation } from "../write/offers";
-import { checkBookingPrice, checkOrderLines } from "../write/pricing";
+import { checkBookingPrice, checkOrderLines, checkQuoteRequest } from "../write/pricing";
 import { withdrawalOf } from "../write/returns";
 import { appendThreadEntry } from "../write/thread";
 import {
@@ -1328,6 +1328,8 @@ export class Capabilities {
     if (!replay) {
       await this.refuseNotOffered(c, "quote_request");
       requireClient(c, input.contact, "quote_request");
+      // About something the business has, or in the person's own words; a budget in its currency.
+      if (clientRequired(c)) await checkQuoteRequest(this.db, input.payload);
     }
     // The site against the area, an emergency against its door, the files checked and kept (ADR-039).
     const inboxAdds = await this.trades.prepareRequest(c, input.payload, input.attachments);

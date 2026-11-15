@@ -58,9 +58,13 @@ The founder's, 15 November 2026:
   `unknown_product`, `not_on_sale`, `not_priced`, `currency_not_ours`, `price_not_ours`, `total_not_ours`; for
   bookings `422 currency_not_ours` (a total in another currency than the service's) and `price_not_ours` (a total
   for a service priced from, or with no price, while the business takes no price of the customer's own: it would
-  otherwise be stored as the booking's). A different total for a fixed-price service is still only noted. Each
+  otherwise be stored as the booking's). A different total for a fixed-price service is still only noted. For
+  requests for a price `422 unknown_product` and `unknown_service` (an id or sku the business has not on offer;
+  what the person asks about in their own words, `itemOffered.name` alone, is what a request for a price is for)
+  and `currency_not_ours` (a budget, or `job.budgetMax`, in another currency). Each
   comes before the confirm step, before files are kept and before any network is asked, and writes nothing. Checked
-  early in each create (`requireClient`, `refuseNotOffered`, `checkOrderLines`, `checkBookingPrice`), and all of
+  early in each create (`requireClient`, `refuseNotOffered`, `checkOrderLines`, `checkBookingPrice`,
+  `checkQuoteRequest`), and all of
   them again where every create of a person goes (`IdentityCapabilities.create`), after its own replay lookup: a
   door whose early lookup found a retry whose key has since been pruned writes nothing they would refuse.
 - **Schemas.** `contact` and its `name` are listed as required in the JSON Schema (the MCP tool list,

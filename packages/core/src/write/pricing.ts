@@ -482,6 +482,76 @@ export async function checkBookingPrice(
   );
 }
 
+/**
+ * An assistant's request for a price as the business takes it (ADR-048): a product or a service it names
+ * (`itemOffered.productId`, `sku` or `serviceId`) is one the business has on offer, and a budget it carries
+ * (`budget`, `job.budgetMax`) is in the business's currency. Something asked about in the person's own words
+ * (`itemOffered.name` alone) is what a request for a price is for, and is taken.
+ */
+export async function checkQuoteRequest(db: Db, payload: unknown): Promise<void> {
+  const p = (payload ?? {}) as {
+    readonly itemOffered?: { readonly productId?: unknown; readonly sku?: unknown; readonly serviceId?: unknown };
+    readonly budget?: Money | undefined;
+    readonly job?: { readonly budgetMax?: Money | undefined } | undefined;
+  };
+  const named = p.itemOffered ?? {};
+  if (typeof named.productId === "string" || typeof named.sku === "string") {
+    const byId = typeof named.productId === "string";
+    const [row] = await db.orm
+      .select({ active: products.active })
+      .from(products)
+      .where(byId ? eq(products.id, named.productId as string) : eq(products.sku, named.sku as string))
+      .limit(1);
+    if (!row || row.active === 0) {
+      throw new WriteError(
+        "invalid_input",
+        "We have no product by that id or sku on offer: name one of ours from list_products, or leave it out and say what your person needs in itemOffered.name. Nothing was written.",
+        {
+          fields: [
+            {
+              path: byId ? "payload.itemOffered.productId" : "payload.itemOffered.sku",
+              problem: "invalid",
+              message: "no such product here",
+            },
+          ],
+          details: { reason: "unknown_product" },
+        },
+      );
+    }
+  }
+  if (typeof named.serviceId === "string") {
+    const [row] = await db.orm
+      .select({ active: services.active })
+      .from(services)
+      .where(eq(services.id, named.serviceId));
+    if (!row || row.active === 0) {
+      throw new WriteError(
+        "invalid_input",
+        "We have no service by that id on offer: name one of ours from list_services, or leave it out and say what your person needs in itemOffered.name. Nothing was written.",
+        {
+          fields: [{ path: "payload.itemOffered.serviceId", problem: "invalid", message: "no such service here" }],
+          details: { reason: "unknown_service" },
+        },
+      );
+    }
+  }
+  const currency = (await businessCurrency(db)).toUpperCase();
+  const foreign: FieldProblem[] = [];
+  if (p.budget && p.budget.currency.toUpperCase() !== currency) {
+    foreign.push({ path: "payload.budget.currency", problem: "invalid", message: `must be ${currency}` });
+  }
+  if (p.job?.budgetMax && p.job.budgetMax.currency.toUpperCase() !== currency) {
+    foreign.push({ path: "payload.job.budgetMax.currency", problem: "invalid", message: `must be ${currency}` });
+  }
+  if (foreign.length) {
+    throw new WriteError(
+      "invalid_input",
+      `Our prices are in ${currency}: give your person's budget in ${currency}, or leave it out. Nothing was written.`,
+      { fields: foreign, details: { reason: "currency_not_ours", currency } },
+    );
+  }
+}
+
 /** The catalogue names of `names`, as a sentence lists them: "Bread", "Bread and Wine", "Bread, Wine and Oil". */
 function listed(names: readonly string[]): string {
   return names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : (names[0] ?? "");
