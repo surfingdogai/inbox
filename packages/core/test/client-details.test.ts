@@ -648,6 +648,44 @@ describe("an assistant's new request with its client", () => {
     expect(s.mail.sent.filter((m) => !m.to.includes("owner@oficinamare.example"))).toEqual([]);
   });
 
+  it("writes the details it brought on the known party it joins, never over what the party holds", async () => {
+    const s = await setup();
+    // A person who wrote by email with no display name: the party stands under the address.
+    const byEmail = at("customer_human", "email", { tier: "anonymous" });
+    const first = (await s.caps.sendMessage(byEmail, { body: "Hello", contact: { email: "rita@example.com" } })) as {
+      view: { item: { partyId: string } };
+    };
+    const partyOf = async (id: string) => {
+      const { rows } = await s.db.client.query({
+        sql: "SELECT display_name, contact FROM parties WHERE id = ?",
+        params: [id],
+        method: "all",
+      });
+      return { display: rows[0]?.[0], contact: JSON.parse(String(rows[0]?.[1])) as Record<string, unknown> };
+    };
+    const known = (await s.db.client.query({ sql: "SELECT party_id FROM items", method: "all" }))
+      .rows[0]?.[0] as string;
+    expect(first).toBeTruthy();
+    expect(await partyOf(known)).toMatchObject({ display: "rita@example.com" });
+    // Their assistant, with a key bound to that party, brings a name and a phone: both are written on it.
+    const bound: Caller = {
+      ...agent(),
+      actor: { kind: "customer_agent", id: "key:1", channel: "rest", partyId: known },
+    };
+    const joined = await s.caps.sendMessage(bound, {
+      body: "Open Saturday?",
+      contact: { name: "Rita Silva", phone: "+351 912 345 678", email: "other@example.com" },
+    });
+    expect("view" in joined && joined.view.item.partyId).toBe(known);
+    expect(await partyOf(known)).toEqual({
+      display: "Rita Silva",
+      contact: { email: "rita@example.com", name: "Rita Silva", phone: "+351 912 345 678" },
+    });
+    // What the party holds stands: another name later changes nothing.
+    await s.caps.sendMessage(bound, { body: "And Sunday?", contact: { name: "R. Silva", phone: "+351 912 000 111" } });
+    expect(await partyOf(known)).toMatchObject({ display: "Rita Silva", contact: { name: "Rita Silva" } });
+  });
+
   it("answers a retry of a request stored before, without its client, as it was", async () => {
     const s = await setup();
     const scoped = agent();

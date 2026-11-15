@@ -38,7 +38,9 @@ The founder's, 15 November 2026:
   to (a name of at most 200 characters, an email address, a phone of at most 40), in the same words. A follow-up
   belongs to an item that has its client (a reply, details asked for, an answer to an offer, a cancellation, a
   withdrawal, a return, the order or booking an accepted quote makes). A retry of a request already written is
-  answered as it was.
+  answered as it was. A request that joins a party the business knows (a key bound to it, a pass linked here, an
+  email a network proved) writes the details it brought that the party does not hold yet (a name, an email, a
+  phone, a language), and names a party known only by its address; what the party holds is never changed.
 - **What counts.** A name: trimmed, 1 to 200 characters, a letter you can see (a name of fillers such as U+3164 is
   none), no `@`. An email address the networks' normalisation takes, with a dot in its domain, at most 254
   characters. A phone: 6 to 20 digits, no letters, nothing else but spaces, `+`, dashes, brackets, dots and slashes,
