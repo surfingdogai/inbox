@@ -74,7 +74,13 @@ import { z } from "zod";
 import { TOOL_SCOPES } from "./access";
 import { foodInstructions, hasMenuDoors, registerOwnerFoodTools, registerPublicFoodTools } from "./food";
 import { problemFrom, problemText } from "./problem";
-import { registerOwnerStayTools, registerPublicStayTools, STAY_INSTRUCTIONS } from "./stays";
+import {
+  registerOwnerStayTools,
+  registerPublicStayTools,
+  STAY_INSTRUCTIONS,
+  stayInstructionsElsewhere,
+  takesStays,
+} from "./stays";
 import { registerPublicTradesTools, TRADES_INSTRUCTIONS, takesWork } from "./trades";
 import { itemTexts, ownerSentence, withUntrusted } from "./untrusted";
 
@@ -422,8 +428,12 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
     // Only the kinds the business takes here have tools (ADR-048): an agent is never offered a door that
     // refuses it. A reply, an answer and a cancellation are about an item already made, and always listed.
     const takes = new Set(profile.item_types);
-    // A place to stay (ADR-037) says how its stays are asked for, held and booked, and has the tools.
+    // A place to stay (ADR-037) shows its rooms and what is free whenever it has a property on offer, and says
+    // how its stays are asked for, held and booked, with the tools, only while it takes them here (ADR-048).
+    // Taken at its own booking engine, what is free comes with that page for the dates (ADR-037 §6.4).
+    const property = await takesStays(caps);
     const stays = takes.has("stay");
+    const staysElsewhere = (profile.doors_elsewhere ?? []).some((d) => d.item_type === "stay");
     // A trade (ADR-039) says how a job is asked for, with its photos, and where it works; a kitchen
     // (ADR-040) how its menu reads, allergens included, and how an order for a time is made.
     const work = await takesWork(caps);
@@ -439,14 +449,14 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
     const ordersAt = menu ? await caps.food.orderDoorElsewhere() : null;
     const instructions = [
       publicInstructions(profile, { menuNamesOrders: menu && ordersAt !== null }),
-      ...(stays ? [STAY_INSTRUCTIONS] : []),
+      ...(property ? [stays ? STAY_INSTRUCTIONS : stayInstructionsElsewhere(staysElsewhere)] : []),
       ...(work ? [TRADES_INSTRUCTIONS] : []),
       ...(menu ? [foodInstructions(ordersAt, { orders: takes.has("order") })] : []),
       ...(agentPay ? [AGENT_PAY_INSTRUCTIONS] : []),
       ...(stripePay ? [STRIPE_PAY_INSTRUCTIONS] : []),
     ];
     const server = lenientTools(new McpServer({ name, version }, { instructions: instructions.join(" ") }));
-    if (stays) registerPublicStayTools(server, caps, caller);
+    if (property) registerPublicStayTools(server, caps, caller, { creates: stays });
     if (work) registerPublicTradesTools(server, caps, caller);
     if (menu) registerPublicFoodTools(server, caps, caller, { ordersAt, orders: takes.has("order") });
 

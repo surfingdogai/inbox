@@ -67,9 +67,12 @@ The founder's, 15 November 2026:
   read with them optional, and what is stored is read again strictly. `order` is offered only with an active
   product priced `fixed`; the setup plan predicts the same.
 - **Tools.** The public MCP lists a create tool only for a kind in `item_types`: `create_order` and
-  `quote_shipping` for orders, `check_availability` and `create_booking` for bookings, `request_quote`, the stay
-  tools. `send_message` is always listed, since it carries the replies, and says it only replies while new messages
-  are off. The server's instructions say what to bring before anything new, and where a kind taken elsewhere goes.
+  `quote_shipping` for orders, `check_availability` and `create_booking` for bookings, `request_quote`,
+  `request_stay` and `hold_stay` for stays. A place to stay keeps the tools that read (`get_property`,
+  `check_stay_availability`, `quote_stay`) and those that follow a stay already made (`book_stay`, `change_stay`)
+  wherever it takes its stays: taken at its own booking engine, what is free comes with that page for the dates
+  (ADR-037 §6.4). `send_message` is always listed, since it carries the replies, and says it only replies while new
+  messages are off. The server's instructions say what to bring before anything new, and where a kind taken elsewhere goes.
   REST keeps every route: the business's keys use them.
 
 ## What this changes

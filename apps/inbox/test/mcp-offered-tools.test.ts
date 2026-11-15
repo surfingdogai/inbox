@@ -47,12 +47,16 @@ async function setup() {
       updatedAt: now,
     });
   };
-  return { db, ownerCall, server, service };
+  return { db, app, ownerCall, server, service };
 }
 
 const ORDER_TOOLS = ["create_order", "quote_shipping"];
 const BOOKING_TOOLS = ["check_availability", "create_booking"];
 const STAY_TOOLS = ["get_property", "check_stay_availability", "quote_stay", "request_stay", "hold_stay", "book_stay"];
+/** What asks for a stay: listed only while the place takes stays here. */
+const STAY_CREATES = ["request_stay", "hold_stay"];
+/** What reads, and what follows a stay already made: listed for any place to stay. */
+const STAY_READS = ["get_property", "check_stay_availability", "quote_stay", "book_stay", "change_stay"];
 const CONTACT_SENTENCE =
   "Before you send anything new here, ask your person for their name and an email address or a phone number, and send only what they agree to give this business, in contact (name, and email or phone). Never make them up or send your own: without them nothing is written.";
 
@@ -130,15 +134,19 @@ describe("the public MCP's tools", () => {
     );
   });
 
-  it("lists the stay tools only once the place has a room to offer", async () => {
+  it("lists the stay tools that read for a place to stay, and those that ask for a stay once it has a room to offer", async () => {
     const s = await setup();
+    for (const t of [...STAY_TOOLS, "change_stay"]) expect((await s.server()).names).not.toContain(t);
     const put = await s.ownerCall("PUT", "/v1/owner/property", {
       name: "Casa Lua",
       kind: "guesthouse",
       currency: "EUR",
     });
     expect(put.ok, await put.clone().text()).toBe(true);
-    for (const t of STAY_TOOLS) expect((await s.server()).names).not.toContain(t);
+    let { names, instructions } = await s.server();
+    for (const t of STAY_READS) expect(names).toContain(t);
+    for (const t of STAY_CREATES) expect(names).not.toContain(t);
+    expect(instructions).toContain("This is a place to stay that takes no stays here.");
     const room = await s.ownerCall("POST", "/v1/owner/property/rooms", {
       name: "Garden room",
       units: 1,
@@ -146,7 +154,50 @@ describe("the public MCP's tools", () => {
       beds: [{ type: "queen", count: 1 }],
     });
     expect(room.ok, await room.clone().text()).toBe(true);
-    const { names } = await s.server();
+    ({ names, instructions } = await s.server());
     for (const t of STAY_TOOLS) expect(names).toContain(t);
+    expect(instructions).toContain("hold_stay holds it");
+  });
+
+  it("keeps what is free when stays are taken at the property's own booking engine, with its page for the dates", async () => {
+    const s = await setup();
+    await s.ownerCall("PUT", "/v1/owner/property", { name: "Casa Lua", kind: "guesthouse", currency: "EUR" });
+    const room = await s.ownerCall("POST", "/v1/owner/property/rooms", {
+      name: "Garden room",
+      units: 1,
+      capacity: { adults: 2, children: 0, total: 2 },
+      beds: [{ type: "queen", count: 1 }],
+    });
+    expect(room.ok, await room.clone().text()).toBe(true);
+    const engine = "https://engine.example.net/lua";
+    const set = await s.ownerCall("PUT", "/v1/owner/settings", {
+      doc: {
+        doorsElsewhere: [
+          { itemType: "stay", url: engine, urlTemplate: `${engine}?in={check_in}&out={check_out}&adults={adults}` },
+        ],
+      },
+    });
+    expect(set.status, await set.clone().text()).toBe(200);
+    const { names, instructions } = await s.server();
+    for (const t of STAY_READS) expect(names).toContain(t);
+    for (const t of STAY_CREATES) expect(names).not.toContain(t);
+    expect(instructions).toContain("takes its stays on its own booking page, not here");
+    // What is free names the page with the dates filled in, in the text an assistant reads.
+    const client = new Client({ name: "some-assistant", version: "0" });
+    await client.connect(
+      new StreamableHTTPClientTransport(new URL(`${BASE}/mcp`), {
+        fetch: async (input: string | URL, init?: RequestInit) => s.app.request(String(input), init),
+      }),
+    );
+    const day = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
+    const r = (await client.callTool({
+      name: "check_stay_availability",
+      arguments: { check_in: day(30), check_out: day(32), adults: 2 },
+    })) as { isError?: boolean; content: { text: string }[]; structuredContent: { elsewhere?: string } };
+    await client.close();
+    const page = `${engine}?in=${day(30)}&out=${day(32)}&adults=2`;
+    expect(r.isError, r.content[0]?.text).toBeFalsy();
+    expect(r.structuredContent.elsewhere).toBe(page);
+    expect(r.content[0]?.text).toContain(`This property takes stays on its own booking page, not here: ${page}`);
   });
 });
