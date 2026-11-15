@@ -9,6 +9,7 @@ import {
   type ItemFlags,
   type ItemType,
   itemFlagsSchema,
+  type OrderRequestPayload,
   payloadSchemas,
   type ReturnTerms,
   requestSchemaOf,
@@ -44,7 +45,7 @@ import { fromZod, WriteError } from "./errors";
 import { IDEMPOTENCY_TTL_MS, strongIdempotencyKey } from "./idempotency";
 import { NEGOTIATES, requestExpiry, requestRow } from "./offers";
 import { planParty } from "./party";
-import { type PricingFor, priceFromCatalogue } from "./pricing";
+import { completeOrder, type PricingFor, priceFromCatalogue } from "./pricing";
 import { claimStatements } from "./slots";
 import { defaultSubject, type ItemView, viewFor } from "./views";
 
@@ -203,9 +204,9 @@ export async function createItem(
           ),
         )
       : input.payload;
-  // A customer's order may leave its lines' names and prices, and its total, to the catalogue (ADR-048): it is
-  // read as its request may send it, priced below, and what is stored is read again strictly.
-  const parsed = requestSchemaOf(input.type, isCustomer(caller)).safeParse(
+  // An order may leave its lines' names and prices, and its total, to the catalogue (ADR-048), whoever writes it:
+  // it is read as its request may send it, priced or completed below, and what is stored is read again strictly.
+  const parsed = requestSchemaOf(input.type).safeParse(
     adds ? { ...(sent as Record<string, unknown>), ...adds.payload } : sent,
   );
   if (!parsed.success) throw fromZod(parsed.error, "payload");
@@ -253,6 +254,8 @@ export async function createItem(
   // making a request itself is priced the same way: time yes, money no (the founder, 23 September 2026),
   // so a figure of its own is never the price, and one the catalogue does not give waits for a person.
   // The price is the customer's own: the owner's reward for their record, when they earned one (Q3).
+  // The business's own order (the owner, its keys, a connector) is written as it is, what it left out given by
+  // the catalogue: a line's name and price, and the total.
   const priced =
     isCustomer(caller) || isOwnerAssistant(caller)
       ? await priceFromCatalogue(
@@ -262,7 +265,9 @@ export async function createItem(
           isCustomer(caller) ? input.pricing : undefined,
           nowOf(caller),
         )
-      : { payload: parsed.data as Record<string, unknown>, unpriced: false };
+      : input.type === "order"
+        ? { payload: await completeOrder(db, parsed.data as OrderRequestPayload), unpriced: false }
+        : { payload: parsed.data as Record<string, unknown>, unpriced: false };
   // What is stored is read back through the same schema: a priced payload it would refuse (a total
   // too large to write down exactly) is refused here, never written for every later read to fail on.
   const checked = schema.safeParse(priced.payload);

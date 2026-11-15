@@ -109,7 +109,7 @@ export class IdentityCapabilities {
     // A customer's order is read as its request may send it, its prices left to the catalogue.
     const valid =
       payloadSchemas[input.type] !== undefined &&
-      requestSchemaOf(input.type, isCustomer(caller)).safeParse(input.payload).success &&
+      requestSchemaOf(input.type).safeParse(input.payload).success &&
       !hasStarted(input, now);
     const test = caller.sandbox || input.flags?.sandbox === true;
     // A customer who asked the business not to use booking networks (the founder, 23 September 2026): no

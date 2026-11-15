@@ -715,12 +715,12 @@ export const payloadSchemas = {
 export type PayloadOf<T extends ItemType> = z.infer<(typeof payloadSchemas)[T]>;
 
 /**
- * The schema a create is first read with (ADR-048): a customer's order may leave its lines' names and
- * prices, and its total, to the catalogue (`orderRequestPayloadSchema`); what is stored is read again
- * with `payloadSchemas`, so it always has them.
+ * The schema a create is first read with (ADR-048): an order may leave its lines' names and prices, and its total,
+ * to the catalogue (`orderRequestPayloadSchema`), whoever writes it; what is stored is read again with
+ * `payloadSchemas`, so it always has them.
  */
-export function requestSchemaOf(type: ItemType, customer: boolean): z.ZodType {
-  return customer && type === "order" ? orderRequestPayloadSchema : payloadSchemas[type];
+export function requestSchemaOf(type: ItemType): z.ZodType {
+  return type === "order" ? orderRequestPayloadSchema : payloadSchemas[type];
 }
 
 // ---- the item envelope ----------------------------------------------------

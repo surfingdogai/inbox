@@ -71,8 +71,9 @@ The founder's, 15 November 2026:
   `/openapi.json`), with each detail's format and length, and read as sent: nothing about the contact is refused by
   a schema, so every door answers in the client rule's words; no `anyOf`, which some clients cannot take. The MCP
   tools' text names each detail's need in full, so a phone is asked for as readily as an email. An order's line
-  names and prices and its total may be left to the catalogue: a customer's order is first read with them
-  optional, and what is stored is read again strictly.
+  names and prices and its total may be left to the catalogue, whoever writes it: an order is first read with them
+  optional, priced (a customer's, the owner's AI's) or completed (the business's own, whose own figures stand),
+  and what is stored is read again strictly.
 - **Orders.** The business's currency is its own, as its profile publishes it (`currency`), never the catalogue's
   first line's. A line names a product on sale, not past its last moment to order (`available_until`), priced
   `fixed` in that currency; one priced from, as a range, on request or in another currency is `not_priced`, said

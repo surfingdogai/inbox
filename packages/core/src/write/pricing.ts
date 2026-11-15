@@ -552,6 +552,39 @@ export async function checkQuoteRequest(db: Db, payload: unknown): Promise<void>
   }
 }
 
+/**
+ * The business's own order as it may write it (ADR-048): a line naming a product of its catalogue (`productId`,
+ * else `sku`) may leave its name and its price to the catalogue, a fixed price with what its options add, and the
+ * order may leave its total, the lines' prices times their quantities when they are in one currency. What it wrote
+ * stands as it wrote it; what the catalogue cannot give is refused when the order is read strictly.
+ */
+export async function completeOrder(db: Db, payload: OrderRequestPayload): Promise<Record<string, unknown>> {
+  const lines = payload.orderedItem;
+  const catalogue = await productsFor(db, lines);
+  const priced = await linePricing(db, lines);
+  const orderedItem = lines.map((line, i) => {
+    const product =
+      (line.productId !== undefined ? catalogue.byId.get(line.productId) : undefined) ??
+      (line.sku !== undefined ? catalogue.bySku.get(line.sku) : undefined);
+    if (!product) return line;
+    const list = priced[i]?.productId === product.id ? priced[i]?.list : undefined;
+    return {
+      ...line,
+      ...(line.name === undefined ? { name: clip(product.name, 200) } : {}),
+      ...(line.price === undefined && list ? { price: list } : {}),
+    };
+  });
+  if (payload.totalPrice !== undefined) return { ...payload, orderedItem };
+  const currency = orderedItem[0]?.price?.currency.toUpperCase();
+  let total = 0;
+  for (const l of orderedItem) {
+    if (!l.price || l.price.currency.toUpperCase() !== currency) return { ...payload, orderedItem };
+    total += l.price.value * l.quantity;
+  }
+  if (currency === undefined || !Number.isSafeInteger(total)) return { ...payload, orderedItem };
+  return { ...payload, orderedItem, totalPrice: { value: total, currency } };
+}
+
 /** The catalogue names of `names`, as a sentence lists them: "Bread", "Bread and Wine", "Bread, Wine and Oil". */
 function listed(names: readonly string[]): string {
   return names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : (names[0] ?? "");

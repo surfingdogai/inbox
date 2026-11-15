@@ -466,6 +466,45 @@ describe("the business's own orders", () => {
     const key = await order(s, { orderedItem: [line], totalPrice: EUR(100) }, {}, integration);
     expect(key.view.item.payload).toMatchObject({ orderedItem: [line], totalPrice: EUR(100) });
   });
+
+  it("may leave a line's name and price, and the total, to the catalogue, as the door says", async () => {
+    const s = await setup();
+    for (const caller of [owner, integration, ownerAi]) {
+      const made = await order(
+        s,
+        {
+          orderedItem: [
+            { productId: s.saddle, quantity: 2 },
+            { sku: "CH-9", quantity: 1 },
+          ],
+        },
+        {},
+        caller,
+      );
+      expect(made.view.item.payload, caller.actor.kind).toMatchObject({
+        orderedItem: [
+          { productId: s.saddle, name: "Saddle", quantity: 2, price: EUR(15_000) },
+          { sku: "CH-9", name: "Chain", quantity: 1, price: EUR(1_850) },
+        ],
+        totalPrice: EUR(31_850),
+      });
+    }
+    // What the business wrote stands: its own price, its own name, its own total.
+    const own = await order(
+      s,
+      { orderedItem: [{ productId: s.saddle, name: "Saddle, demo", quantity: 1, price: EUR(9_000) }] },
+      {},
+      integration,
+    );
+    expect(own.view.item.payload).toMatchObject({
+      orderedItem: [{ name: "Saddle, demo", price: EUR(9_000) }],
+      totalPrice: EUR(9_000),
+    });
+    // A line the catalogue cannot price still names what is missing.
+    const bare = await refused(order(s, { orderedItem: [{ name: "Fitting", quantity: 1 }] }, {}, integration));
+    expect(bare.code).toBe("invalid_input");
+    expect(bare.fields?.map((f) => f.path)).toContain("payload.orderedItem.0.price");
+  });
 });
 
 describe("an assistant's request for a price", () => {

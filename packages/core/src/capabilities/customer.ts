@@ -460,7 +460,7 @@ export class CustomerDoors {
     const settings = await readSettings(this.db);
     if (settings.commerce.customers === "businesses") return no;
     // Read as the request may send it: an order's prices left to the catalogue still bind once priced (ADR-048).
-    const parsed = requestSchemaOf(type, true).safeParse(input.payload);
+    const parsed = requestSchemaOf(type).safeParse(input.payload);
     // The create says what is wrong with it, in its own words.
     if (!parsed.success) return no;
     const now = nowOf(caller);
