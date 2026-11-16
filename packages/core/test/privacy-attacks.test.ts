@@ -10,7 +10,7 @@ import { secretHash } from "../src/protocol/credentials";
 import { MIGRATIONS } from "../src/schema/migrations.generated";
 import { availabilityRules, services } from "../src/schema/tables";
 import { createSecretBox } from "../src/secrets/box";
-import { type Caller, transitionItem } from "../src/write/index";
+import { type Caller, createItem, transitionItem } from "../src/write/index";
 import { confirming, makeClient, resetTables } from "./harness";
 
 /**
@@ -398,8 +398,10 @@ describe("erasing a customer who asked for a quote in their own words", () => {
       expect(text.toLowerCase(), `her words in ${table}`).not.toContain("wedding");
     }
     // A line of an order they typed themselves (nothing in the catalogue) is their words too; its
-    // quantity and price stay, as agreed.
-    const o = await s.caps.createOrder(customer(T0 + MIN), {
+    // quantity and price stay, as agreed. An assistant names only what the business sells (ADR-048), so it
+    // is written as the business's own records hold such a line.
+    const o = await createItem(s.db, customer(T0 + MIN), {
+      type: "order",
       payload: {
         orderedItem: [
           { name: "Engraving: Rita Carvalho, wedding day", quantity: 2, price: { value: 1_500, currency: "EUR" } },

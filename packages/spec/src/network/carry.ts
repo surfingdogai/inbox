@@ -8,9 +8,9 @@ import { timestampSchema } from "./common";
  * unless the owner switched it off; a manifest without it is carried nothing). The network keeps only a record that it was delivered: when, to which
  * business, and the outcome. Nothing anyone wrote, and nothing about the person.
  *
- * The person's contact is an email address they agreed to give the business, never a phone
- * number. The answer is the inbox's own: its item, its words, and the access token it hands an
- * anonymous creator.
+ * The person's contact is their name and an email address they agreed to give the business, never a
+ * phone number (spec 0.18: a business's inbox refuses a request without the name, ADR-048). The answer
+ * is the inbox's own: its item, its words, and the access token it hands an anonymous creator.
  */
 
 /** A domain as search_businesses and get_business give it. */
@@ -23,22 +23,46 @@ const domainArg = z
 /** An email address, as a person types it: one @, a dot after it, no spaces. */
 export const CARRY_EMAIL_PATTERN = '^[^\\s@<>()\\[\\],;:"]{1,64}@[^\\s@<>()\\[\\],;:"]+\\.[^\\s@<>()\\[\\],;:"]{2,}$';
 
-/** Where the business can answer: an email address the person agreed to give it. Never a phone number. */
+/**
+ * A name as a business's inbox takes one (ADR-048): a letter you can see in it, and no @. An inbox also refuses
+ * a placeholder for one (N/A, Test, {{name}}), which no schema can tell from a name: the description says so.
+ */
+export function carryName(name: string): boolean {
+  return !name.includes("@") && /\p{L}/u.test(name.replace(/[\p{Default_Ignorable_Code_Point}\s]/gu, ""));
+}
+
+/**
+ * Who the request is from, as the person agreed to give it to the business: their name and an email address.
+ * Never a phone number. Since 0.18 the name is required, and is one (`carryName`): a business's inbox refuses a
+ * request without it, or with a name that is none.
+ */
 export const carryContactSchema = z
   .strictObject({
     email: z
       .string()
       .max(254)
       .regex(new RegExp(CARRY_EMAIL_PATTERN))
-      .describe("Your person's email address, which they agreed to give this business for its answer."),
-    name: z.string().min(1).max(100).optional().describe("The name your person wants the business to use."),
+      .describe(
+        "Your person's email address, which they agreed to give this business for its answer: one that receives mail, never a no-reply one or one at .invalid, .test or localhost.",
+      ),
+    name: z
+      .string()
+      .trim()
+      .min(1)
+      .max(100)
+      .refine(carryName, { message: "a name, with a letter in it and no @" })
+      .describe(
+        "Your person's name, as they gave it for the business to use: with a letter in it and no @, and never a placeholder (N/A, Test, {{name}}). A business's inbox refuses a request without it, or with one that is not a name.",
+      ),
   })
-  .describe("Where the business can answer. Only an email address and a name: never a phone number.");
+  .describe(
+    "Who the request is from, as your person agreed to give it to this business: their name and their email address. Never a phone number.",
+  );
 
 const consentArg = z
   .literal(true)
   .describe(
-    "true only when your person agreed to give this business their email address for its answer. Without it nothing is sent.",
+    "true only when your person agreed to give this business their name and email address for its answer. Without it nothing is sent.",
   );
 
 const languageArg = z
@@ -97,11 +121,17 @@ export const requestBookingInputSchema = z.object({
     .regex(/^[A-Za-z0-9_-]{43}$/)
     .optional()
     .describe("The confirm.terms_sha of the last answer, sent only after your person said yes to its summary."),
-  contact: carryContactSchema.optional().describe("Needed with start: where the business can answer."),
+  contact: carryContactSchema
+    .optional()
+    .describe(
+      "Needed with start: who the request is from, as your person agreed to give it to this business: their name and their email address. Never a phone number.",
+    ),
   consent: z
     .literal(true)
     .optional()
-    .describe("Needed with start: true only when your person agreed to give this business their email address."),
+    .describe(
+      "Needed with start: true only when your person agreed to give this business their name and email address for its answer.",
+    ),
   language: languageArg,
 });
 export type RequestBookingInput = z.infer<typeof requestBookingInputSchema>;

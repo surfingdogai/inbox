@@ -1,9 +1,9 @@
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { createApiKey } from "@surfingdog/adapters";
-import { conditionSchema } from "@surfingdog/core";
+import { conditionSchema, type Db, schema, ulid } from "@surfingdog/core";
 import { describe, expect, it } from "vitest";
 import { type App, createApp } from "../src/app";
-import { freshDb } from "./harness";
+import { aProduct, freshDb, openWeekdays } from "./harness";
 
 /**
  * The tool schemas, as real AI clients take them. Run against the real clients on 1 November 2026:
@@ -27,6 +27,39 @@ async function toolsOf(app: App, path: string, headers: Record<string, string> =
 }
 
 const isObject = (v: unknown): v is Json => typeof v === "object" && v !== null && !Array.isArray(v);
+
+/**
+ * Something of every kind on offer: a service with hours, a product at a fixed price and a room, so every
+ * create tool is listed (only the kinds a business takes have tools, ADR-048) and its schema checked.
+ */
+async function offerEverything(app: App, db: Db, key: string): Promise<void> {
+  const now = Date.now();
+  await db.orm.insert(schema.services).values({
+    id: ulid(),
+    name: "Full service",
+    durationMin: 60,
+    price: { model: "fixed", value: 4500, currency: "EUR" },
+    createdAt: now,
+    updatedAt: now,
+  });
+  await openWeekdays(db);
+  await aProduct(db, { name: "Chain", value: 1850 });
+  const owner = (method: string, path: string, body: unknown) =>
+    app.request(`https://inbox.test${path}`, {
+      method,
+      headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  const property = await owner("PUT", "/v1/owner/property", { name: "Casa Lua", kind: "guesthouse", currency: "EUR" });
+  expect(property.ok, await property.clone().text()).toBe(true);
+  const room = await owner("POST", "/v1/owner/property/rooms", {
+    name: "Garden room",
+    units: 1,
+    capacity: { adults: 2, children: 0, total: 2 },
+    beds: [{ type: "queen", count: 1 }],
+  });
+  expect(room.ok, await room.clone().text()).toBe(true);
+}
 
 /** Every place a schema object is expected and a bare boolean was given (additionalProperties may be one). */
 function bareBooleans(schema: unknown, at: string, out: string[] = []): string[] {
@@ -98,11 +131,25 @@ describe("MCP tool schemas, as real clients take them", () => {
     const db = await freshDb();
     const app = createApp({ db });
     const owner = await createApiKey(db, { kind: "owner", name: "portable" });
+    await offerEverything(app, db, owner.key);
     const tools = [
       ...(await toolsOf(app, "/mcp")),
       ...(await toolsOf(app, "/mcp/owner", { authorization: `Bearer ${owner.key}` })),
     ];
-    expect(tools.map((t) => t.name)).toEqual(expect.arrayContaining(["create_booking", "upsert_rule", "test_rule"]));
+    expect(tools.map((t) => t.name)).toEqual(
+      expect.arrayContaining([
+        "check_availability",
+        "create_booking",
+        "create_order",
+        "quote_shipping",
+        "request_quote",
+        "send_message",
+        "request_stay",
+        "hold_stay",
+        "upsert_rule",
+        "test_rule",
+      ]),
+    );
     const problems: string[] = [];
     for (const t of tools) {
       for (const [side, schema] of [

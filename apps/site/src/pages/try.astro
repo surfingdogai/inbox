@@ -30,7 +30,7 @@ jq -n --arg svc "$SVC" --argjson slot "$SLOT" '{
     startTime: $slot.startTime,
     endTime: $slot.endTime
   },
-  contact: { name: "Rita" }
+  contact: { name: "Rita", email: "rita@example.com" }
 }' | curl -s -X POST ${DEMO_URL}/v1/bookings \
   -H 'content-type: application/json' -H "idempotency-key: $KEY" -d @-`;
 const SERVICES = `curl -s ${DEMO_URL}/v1/services | jq '.items[] | {id, name}'`;
@@ -73,7 +73,7 @@ const TOOLS = `curl -s ${DEMO_MCP} \\
         <li class="glass card step">
           <span class="num" aria-hidden="true">2</span>
           <h2 class="h-card">Ask for a booking</h2>
-          <p class="card-text">Paste this, or say it your own way. Any name will do.</p>
+          <p class="card-text">Paste this, or say it your own way. Your AI asks for a name and an email address or a phone number, as a real shop would: any will do, since this one writes to nobody.</p>
           <p class="copy prompt">
             <span>{DEMO_PROMPT}</span>
             <button class="btn btn-secondary btn-sm" type="button" data-copy={DEMO_PROMPT} aria-label="Copy the request" hidden>Copy</button>

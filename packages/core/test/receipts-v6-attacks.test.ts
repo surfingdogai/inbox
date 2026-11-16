@@ -203,7 +203,7 @@ async function confirmedBooking(s: Setup, start = THU_12) {
 /** An order the customer's assistant made for two chains, accepted and paid (€37.00). */
 async function paidOrder(s: Setup) {
   const r = await s.caps.createOrder(anon(), {
-    payload: { orderedItem: [{ productId: s.chain, name: "x", quantity: 2, price: EUR(1) }], totalPrice: EUR(1) },
+    payload: { orderedItem: [{ productId: s.chain, quantity: 2 }] },
     contact: { name: "Rita", email: "rita@example.com", locale: "en" },
   });
   const id = r.view.item.id;
@@ -241,7 +241,7 @@ describe("the limits on changes are the network's, measured from the date it was
   it("an order due some days after it was accepted: raising that setting later does not buy more room", async () => {
     const s = await setup();
     const r = await s.caps.createOrder(anon(), {
-      payload: { orderedItem: [{ productId: s.chain, name: "x", quantity: 2, price: EUR(1) }], totalPrice: EUR(1) },
+      payload: { orderedItem: [{ productId: s.chain, quantity: 2 }] },
       contact: { name: "Rita", email: "rita@example.com", locale: "en" },
     });
     const id = r.view.item.id;
@@ -353,7 +353,7 @@ describe("an order changed without a delivery date keeps the date it had", () =>
   it("brought forward, then switched to collection with no date: still due on the date agreed last", async () => {
     const s = await setup();
     const r = await s.caps.createOrder(anon(), {
-      payload: { orderedItem: [{ productId: s.chain, name: "x", quantity: 2, price: EUR(1) }], totalPrice: EUR(1) },
+      payload: { orderedItem: [{ productId: s.chain, quantity: 2 }] },
       contact: { name: "Rita", email: "rita@example.com", locale: "en" },
     });
     const id = r.view.item.id;
@@ -519,7 +519,7 @@ describe("a refund that owes nothing", () => {
     const s = await setup();
     // Accepted and delivered, to be paid on delivery or on account: nothing paid yet.
     const r = await s.caps.createOrder(anon(), {
-      payload: { orderedItem: [{ productId: s.chain, name: "x", quantity: 3, price: EUR(1) }], totalPrice: EUR(1) },
+      payload: { orderedItem: [{ productId: s.chain, quantity: 3 }] },
       contact: { name: "Rita", email: "rita@example.com", locale: "en" },
     });
     const id = r.view.item.id;

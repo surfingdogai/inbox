@@ -16,9 +16,11 @@ import { confirming, makeClient, resetTables } from "./harness";
 
 /**
  * The business sets its prices (ADR-018 §3.1–3.2, the founder 23 September 2026: "Always the business"). An
- * assistant that books a €100 appointment at €1, or orders a €150 product at €1, gets the business's
- * price; what it wrote is kept for the owner to read and no rule reads it. Catalogue lines and
- * fixed-price services only: a custom line or a service priced `from` stays as written.
+ * assistant that books a €100 appointment at €1 gets the business's price; what it wrote is kept for the owner
+ * to read and no rule reads it. An assistant's order names products the business sells, at its prices
+ * (ADR-048): €1 for a €150 product is refused, unless the business takes a price of the customer's own
+ * (price counters), when it is kept as their offer. A service priced `from`, or a custom line the owner's AI
+ * writes down, stays as written.
  */
 const T0 = Date.parse("2026-09-21T10:00:00Z");
 const EUR = (value: number) => ({ value, currency: "EUR" });
@@ -34,6 +36,17 @@ const owner: Caller = {
   sandbox: false,
   now: () => T0,
 };
+/** The owner's AI, writing an order down for a customer: priced as a customer's is, and never refused a line. */
+const ownerAi: Caller = {
+  actor: { kind: "owner_ai", id: "client_1", channel: "mcp_owner" },
+  actsAs: "owner",
+  principal: { via: "oauth", id: "client_1", name: "Assistant", scopes: ["*"], userId: "u1" },
+  tier: "verified_principal",
+  sandbox: false,
+  now: () => T0,
+};
+/** The business takes a price of the customer's own as their offer (ADR-018 Q1). */
+const counters = { doc: { negotiation: { priceCounters: true } } };
 
 async function setup(vertical?: keyof typeof PRESETS) {
   const db = createDb(await makeClient());
@@ -140,25 +153,43 @@ describe("the business sets its prices", () => {
 
   it("confirms a €30 service at €30 under the €50 preset, whatever the assistant said", async () => {
     const { db, svc, caps, drain } = await setup("appointments");
-    const r = await caps.createBooking(agent, {
-      payload: {
-        reservationFor: { serviceId: svc.small, name: "Puncture repair" },
-        ...tuesday(9),
-        totalPrice: { value: 100, currency: "usd" },
-      },
+    const ask = (totalPrice: { value: number; currency: string }) =>
+      caps.createBooking(agent, {
+        payload: { reservationFor: { serviceId: svc.small, name: "Puncture repair" }, ...tuesday(9), totalPrice },
+      });
+    // A total in a currency that is not ours is refused, naming ours (ADR-048): nothing is written.
+    await expect(ask({ value: 100, currency: "usd" })).rejects.toMatchObject({
+      code: "invalid_input",
+      details: { reason: "currency_not_ours", currency: "EUR" },
+      fields: [{ path: "payload.totalPrice.currency", problem: "invalid" }],
     });
+    expect(await db.orm.select({ id: items.id }).from(items)).toEqual([]);
+    const r = await ask(EUR(100));
     await drain();
     const booked = await row(db, r.view.item.id);
     expect(booked.state).toBe("confirmed");
-    // A fixed price with no currency is in the business's currency.
-    expect(booked.item.payload).toMatchObject({
-      totalPrice: EUR(3_000),
-      customerStatedPrice: { value: 100, currency: "USD" },
-    });
+    // A fixed price with no currency is in the business's currency; the assistant's figure is only noted.
+    expect(booked.item.payload).toMatchObject({ totalPrice: EUR(3_000), customerStatedPrice: EUR(100) });
   });
 
   it("orders a €150 product at €150 when the assistant says €1, and asks a person when the real total is large", async () => {
     const { db, prod, caps, drain } = await setup("shop");
+    // A price that is not ours is refused, naming ours, while the business takes no price of the customer's own.
+    await expect(
+      caps.createOrder(agent, {
+        payload: {
+          orderedItem: [{ productId: prod.saddle, name: "Saddle", quantity: 1, price: EUR(100) }],
+          totalPrice: EUR(100),
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "invalid_input",
+      details: { reason: "price_not_ours", prices: [{ line: 0, product_id: prod.saddle, price: EUR(15_000) }] },
+      fields: [{ path: "payload.orderedItem.0.price", problem: "invalid", message: "ours is €150.00" }],
+    });
+    expect(await db.orm.select({ id: items.id }).from(items)).toEqual([]);
+    // Where it takes one, the €1 is the customer's offer, kept beside the business's price.
+    await caps.updateSettings(owner, counters);
     const one = await caps.createOrder(agent, {
       payload: {
         orderedItem: [{ productId: prod.saddle, name: "Saddle", quantity: 1, price: EUR(100) }],
@@ -213,6 +244,8 @@ describe("the business sets its prices", () => {
 
   it("never lets a rule read the price the assistant stated", async () => {
     const { db, prod, caps, drain } = await setup();
+    // A price of the customer's own is kept only where the business takes one (ADR-048).
+    await caps.updateSettings(owner, counters);
     await db.orm.insert(rules).values({
       id: ulid(),
       name: "Anything the customer priced",
@@ -245,8 +278,20 @@ describe("the business sets its prices", () => {
 
   it("keeps custom lines, services priced `from`, and a request's own business fields as today", async () => {
     const { db, svc, prod, caps } = await setup();
-    // A line naming no product the business has keeps its price, for a person to price.
-    const custom = await caps.createOrder(agent, {
+    // An assistant's line names one of our products (ADR-048): one naming none is refused, and nothing is written.
+    await expect(
+      caps.createOrder(agent, {
+        payload: { orderedItem: [{ name: "Child seat", quantity: 1, price: EUR(100) }], totalPrice: EUR(100) },
+      }),
+    ).rejects.toMatchObject({
+      code: "invalid_input",
+      details: { reason: "product_missing" },
+      fields: [{ path: "payload.orderedItem.0.productId", problem: "missing" }],
+    });
+    expect(await db.orm.select({ id: items.id }).from(items)).toEqual([]);
+    // A line naming no product the business has, written down by the owner's AI, keeps its price, for a person
+    // to price.
+    const custom = await caps.createOrder(ownerAi, {
       payload: { orderedItem: [{ name: "Child seat", quantity: 1, price: EUR(100) }], totalPrice: EUR(100) },
     });
     expect(custom.view.item.payload).toEqual({
@@ -258,9 +303,13 @@ describe("the business sets its prices", () => {
       offer: expect.objectContaining({ by: "customer", rev: 1, status: "open" }),
     });
     // How far a negotiation has gone is the business's to count: the customer's side never reads it.
-    expect((custom.view.item.payload as { offer?: object }).offer).not.toHaveProperty("round");
+    const theirs = await caps.createOrder(agent, {
+      payload: { orderedItem: [{ productId: prod.chain, quantity: 1 }] },
+    });
+    expect((theirs.view.item.payload as { offer?: object }).offer).toMatchObject({ by: "customer", rev: 1 });
+    expect((theirs.view.item.payload as { offer?: object }).offer).not.toHaveProperty("round");
     // With a catalogue line beside it, the catalogue line is the business's and the total follows.
-    const mixed = await caps.createOrder(agent, {
+    const mixed = await caps.createOrder(ownerAi, {
       payload: {
         orderedItem: [
           { sku: "CH-9", name: "Chain", quantity: 2, price: EUR(1) },
@@ -280,7 +329,22 @@ describe("the business sets its prices", () => {
     expect((mixed.view.item.payload as { orderedItem: object[] }).orderedItem[1]).not.toHaveProperty(
       "customerStatedPrice",
     );
-    // A service priced `from`, or with no price, is the business's to price with the customer.
+    // A service priced `from`, or with no price, is the business's to price with the customer: an assistant's own
+    // total for it is refused (ADR-048), and in any currency but ours always is…
+    for (const [serviceId, said] of [
+      [svc.from, "We price Wheel truing from €20.00, so its total is ours to give"],
+      [svc.bare, "We price Chat ourselves"],
+    ] as const) {
+      const asked = { reservationFor: { serviceId, name: "Something" }, ...tuesday(9) };
+      const e = await caps.createBooking(agent, { payload: { ...asked, totalPrice: EUR(100) } }).catch((x) => x);
+      expect(e).toMatchObject({ code: "invalid_input", details: { reason: "price_not_ours" } });
+      expect(e.message).toContain(said);
+      await expect(
+        caps.createBooking(agent, { payload: { ...asked, totalPrice: { value: 1, currency: "AUD" } } }),
+      ).rejects.toMatchObject({ details: { reason: "currency_not_ours", currency: "EUR" } });
+    }
+    // …unless the business takes a price of the customer's own: then it is their offer, for a person to price.
+    await caps.updateSettings(owner, counters);
     for (const serviceId of [svc.from, svc.bare]) {
       const b = await caps.createBooking(agent, {
         payload: { reservationFor: { serviceId, name: "Something" }, ...tuesday(9), totalPrice: EUR(100) },
@@ -288,6 +352,7 @@ describe("the business sets its prices", () => {
       expect(b.view.item.payload).toMatchObject({ totalPrice: EUR(100) });
       expect(b.view.item.payload).not.toHaveProperty("customerStatedPrice");
     }
+    await caps.updateSettings(owner, { doc: { negotiation: { priceCounters: false } } });
     // The stated price is the inbox's to write: one sent in by a customer is not kept.
     const sent = await createItem(db, agent, {
       type: "order",
@@ -302,7 +367,7 @@ describe("the business sets its prices", () => {
     expect(JSON.stringify(sent.view.item.payload)).not.toContain("customerStatedPrice");
     // Lines in two currencies have no one total: the refusal names the line to fix.
     await expect(
-      caps.createOrder(agent, {
+      caps.createOrder(ownerAi, {
         payload: {
           orderedItem: [
             { sku: "CH-9", name: "Chain", quantity: 1, price: EUR(1_850) },
@@ -359,12 +424,16 @@ describe("the business sets its prices", () => {
 
   it("leaves a price the business did not set to a person: no rule confirms or accepts it", async () => {
     const shop = await setup("shop");
-    // No productId, a sku the catalogue does not have: the €1 is the customer's, not the business's.
-    for (const line of [
-      { name: "Saddle", quantity: 1, price: EUR(100) },
-      { sku: "sd-1", name: "Saddle", quantity: 1, price: EUR(100) },
-    ]) {
-      const r = await shop.caps.createOrder(agent, { payload: { orderedItem: [line], totalPrice: EUR(100) } });
+    // No productId, a sku the catalogue does not have: the €1 is the customer's, not the business's. An
+    // assistant's order is refused for it (ADR-048); one the owner's AI writes down waits for a person.
+    for (const [line, reason] of [
+      [{ name: "Saddle", quantity: 1, price: EUR(100) }, "product_missing"],
+      [{ sku: "sd-1", name: "Saddle", quantity: 1, price: EUR(100) }, "unknown_product"],
+    ] as const) {
+      await expect(
+        shop.caps.createOrder(agent, { payload: { orderedItem: [line], totalPrice: EUR(100) } }),
+      ).rejects.toMatchObject({ code: "invalid_input", details: { reason } });
+      const r = await shop.caps.createOrder(ownerAi, { payload: { orderedItem: [line], totalPrice: EUR(100) } });
       await shop.drain();
       const placed = await row(shop.db, r.view.item.id);
       expect(placed.state).toBe("received");
@@ -395,7 +464,9 @@ describe("the business sets its prices", () => {
     expect((await row(shop.db, own.view.item.id)).state).toBe("awaiting_payment");
 
     const { db, svc, caps, drain } = await setup("appointments");
-    // A service priced `from` with the customer's price in it waits; with no price, it is confirmed as before.
+    // A service priced `from` with the customer's price in it (their offer, where the business takes one: ADR-048)
+    // waits; with no price, it is confirmed as before.
+    await caps.updateSettings(owner, counters);
     const priced = await caps.createBooking(agent, {
       payload: { reservationFor: { serviceId: svc.from, name: "Wheel truing" }, ...tuesday(9), totalPrice: EUR(1) },
     });
@@ -424,10 +495,7 @@ describe("the business sets its prices", () => {
   it("names what it prices: a cheap id under a dear name is the cheap thing", async () => {
     const { svc, prod, caps } = await setup();
     const order = await caps.createOrder(agent, {
-      payload: {
-        orderedItem: [{ productId: prod.chain, name: "Saddle", quantity: 1, price: EUR(15_000) }],
-        totalPrice: EUR(15_000),
-      },
+      payload: { orderedItem: [{ productId: prod.chain, name: "Saddle", quantity: 1 }] },
     });
     expect(order.view.item.payload).toMatchObject({
       orderedItem: [{ productId: prod.chain, sku: "CH-9", name: "Chain", price: EUR(1_850) }],
@@ -436,10 +504,7 @@ describe("the business sets its prices", () => {
     expect(order.view.item.subject).toBe("1 × Chain");
     // By sku alone, the line gains the product's id; a productId and a sku naming two products is refused.
     const bySku = await caps.createOrder(agent, {
-      payload: {
-        orderedItem: [{ sku: "SD-1", name: "Seat", quantity: 1, price: EUR(15_000) }],
-        totalPrice: EUR(15_000),
-      },
+      payload: { orderedItem: [{ sku: "SD-1", name: "Seat", quantity: 1 }] },
     });
     expect(bySku.view.item.payload).toMatchObject({ orderedItem: [{ productId: prod.saddle, name: "Saddle" }] });
     await expect(
@@ -498,7 +563,7 @@ describe("what is on sale, and how many there are", () => {
         caps.createOrder(agent, { payload: { orderedItem: [line], totalPrice: EUR(1_850) } }),
       ).rejects.toMatchObject({
         code: "invalid_input",
-        fields: [{ path: "payload.orderedItem.0", message: "not on sale" }],
+        fields: [{ path: "payload.orderedItem.0", message: "not on sale: leave this line out" }],
       });
     }
     expect(await db.orm.select({ id: items.id }).from(items)).toEqual([]);

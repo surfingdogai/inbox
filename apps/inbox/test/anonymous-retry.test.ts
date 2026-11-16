@@ -56,7 +56,7 @@ type Created = {
 describe("an anonymous caller's fingerprint (security review)", () => {
   it("never hands another person's access token to a retry from the same address and user agent", async () => {
     const { app } = await setup();
-    const body = { body: "Do you have a table for two tonight?", contact: { email: "rita@example.com" } };
+    const body = { body: "Do you have a table for two tonight?", contact: { name: "Rita", email: "rita@example.com" } };
     const first = await app.request(post("/v1/messages", body, { "idempotency-key": "msg-1" }));
     expect(first.status).toBe(201);
     const created = (await first.json()) as Created;
@@ -90,7 +90,7 @@ describe("an anonymous caller's fingerprint (security review)", () => {
 
   it("gives the token again to a retry with the same random key, and only to it (ADR-044 §1)", async () => {
     const { app } = await setup();
-    const body = { body: "Do you have a table for two tonight?", contact: { email: "rita@example.com" } };
+    const body = { body: "Do you have a table for two tonight?", contact: { name: "Rita", email: "rita@example.com" } };
     const key = crypto.randomUUID();
     const first = (await (await app.request(post("/v1/messages", body, { "idempotency-key": key }))).json()) as Created;
     expect(first.accessToken).toBeTruthy();

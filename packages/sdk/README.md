@@ -200,7 +200,11 @@ await client.connect(new StreamableHTTPClientTransport(new URL(door.url)));
 
 const result = await trackDoor(
   { network: "network.surfingdog.ai", domain: "bakery.example", door, op: "book", tool: "create_booking" },
-  () => client.callTool({ name: "create_booking", arguments: { start_time: "2026-10-20T10:00:00Z" } }),
+  () =>
+    client.callTool({
+      name: "create_booking",
+      arguments: { start_time: "2026-10-20T10:00:00Z", contact: { name: "Rita Silva", email: "rita@example.com" } },
+    }),
 );
 // In a Worker: ctx.waitUntil(flushDoorReports()). In a script: await flushDoorReports() before exit.
 ```

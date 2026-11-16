@@ -143,7 +143,6 @@ describe("the demo, attacked", { timeout: 30_000 }, () => {
           orderedItem: [
             { sku: "CH-9", name: "Chain", quantity: 351912000111, price: { value: 1850, currency: "EUR" } },
           ],
-          totalPrice: { value: 1850, currency: "EUR" },
         },
         contact: { name: "x" },
       }),
@@ -261,7 +260,9 @@ describe("the demo, attacked", { timeout: 30_000 }, () => {
     );
     expect(viaMcp.status).toBe(413);
     expect(await count(db, "items")).toBe(before);
-    const small = await inbox.app.request(post("/v1/messages", { body: "A normal message", contact: { name: "x" } }));
+    const small = await inbox.app.request(
+      post("/v1/messages", { body: "A normal message", contact: { name: "Rita", email: "rita@example.com" } }),
+    );
     expect(small.status).toBe(201);
   });
 

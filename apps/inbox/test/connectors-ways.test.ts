@@ -15,7 +15,7 @@ import { z } from "zod";
 import { fakePlatform, json } from "../../../packages/adapters/test/fakes/platform";
 import { createInbox } from "../src/app";
 import { fakeShop, fakeShopConnector } from "./fake-shop";
-import { confirmed, freshDb, futureDay, openWeekdays } from "./harness";
+import { aProduct, confirmed, freshDb, futureDay, openWeekdays } from "./harness";
 
 /**
  * The ways in the shared base adds (ADR-030 §5), end to end, each with a connector written for the
@@ -659,18 +659,14 @@ describe("an order in a currency with no minor unit, or one counted in thousandt
       s.owner,
     );
     expect(made.status, await made.clone().text()).toBe(201);
+    // What the business sells, in the currency it prices it in, its own (ADR-048).
+    const product = await aProduct(s.db, { name: item, value, currency });
     const order = await confirmed(
       (r) => s.inbox.app.request(r),
       new Request(`${base}/v1/orders`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          payload: {
-            orderedItem: [{ name: item, quantity: 1, price: { value, currency } }],
-            totalPrice: { value, currency },
-          },
-          contact,
-        }),
+        body: JSON.stringify({ payload: { orderedItem: [{ productId: product, quantity: 1 }] }, contact }),
       }),
     );
     expect(order.status, await order.clone().text()).toBe(201);
@@ -693,7 +689,7 @@ describe("an order in a currency with no minor unit, or one counted in thousandt
       2_800,
       {
         name: "Zakka Osaka",
-        currency: "USD",
+        currency: "JPY",
         timezone: "Asia/Tokyo",
         languages: ["ja", "en"],
       },
@@ -711,7 +707,7 @@ describe("an order in a currency with no minor unit, or one counted in thousandt
       1_250,
       {
         name: "Souq Mubarakiya Spices",
-        currency: "USD",
+        currency: "KWD",
         timezone: "Asia/Kuwait",
         languages: ["ar", "en"],
       },

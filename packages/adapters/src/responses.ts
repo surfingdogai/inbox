@@ -517,7 +517,11 @@ export const profileSchema = z.object({
 });
 
 export const businessProfileSchema = profileSchema.extend({
-  item_types: z.array(z.string()),
+  item_types: z
+    .array(z.string())
+    .describe(
+      "The kinds this business takes here, of message, quote_request, booking, order, refund and stay. A booking, an order, a request for a price or a stay of a kind not listed is refused (403 not_allowed, details.reason <kind>_not_offered).",
+    ),
   price_negotiable: z
     .boolean()
     .optional()

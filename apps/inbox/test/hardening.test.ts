@@ -163,7 +163,14 @@ describe("rate-limit buckets", () => {
   it("hold every address in a /64 to one bucket, and no other /64", async () => {
     const { db, app } = await setup();
     await emptyBucket(db, "public:ip:2001:db8:1:2::/64");
-    const from = (ip: string) => app.request(json("/v1/messages", { body: "Hello" }, { "cf-connecting-ip": ip }));
+    const from = (ip: string) =>
+      app.request(
+        json(
+          "/v1/messages",
+          { body: "Hello", contact: { name: "Rita", email: "rita@example.com" } },
+          { "cf-connecting-ip": ip },
+        ),
+      );
     expect((await from("2001:db8:1:2::abcd")).status).toBe(429);
     expect((await from("2001:db8:1:2:9:9:9:9")).status).toBe(429);
     expect((await from("2001:db8:1:3::1")).status).toBe(201);

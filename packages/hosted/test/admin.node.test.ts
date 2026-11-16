@@ -237,7 +237,12 @@ describe("the admin API (C8.1)", () => {
     expect(all.find((i) => i.id === kept)?.type).toBe("booking");
     const db = new DatabaseSync(rt.shardOf(t).dbPath(t.tenantId), { readOnly: true });
     const flags = db.prepare("SELECT type, flags FROM items ORDER BY type").all() as { type: string; flags: string }[];
+    // Each test request names its client, as every assistant's must (ADR-048): a documentation address.
+    const names = db
+      .prepare("SELECT DISTINCT p.display_name AS name FROM items i JOIN parties p ON p.id = i.party_id")
+      .all() as { name: string }[];
     db.close();
+    expect(names.map((n) => n.name)).toEqual(["Door test"]);
     expect(
       flags.map((f) => [f.type, JSON.parse(f.flags).archived ?? false, JSON.parse(f.flags).example ?? false]),
     ).toEqual([
@@ -378,7 +383,7 @@ describe("the admin API (C8.1)", () => {
     await rt.setState(t, "live", { ownResolves: true });
     const sent = await rt.http(t.ownHost ?? "", "POST", "/v1/messages", {
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ body: "Do you cut curly hair?", contact: { name: "Rita" } }),
+      body: JSON.stringify({ body: "Do you cut curly hair?", contact: { name: "Rita", email: "rita@example.com" } }),
     });
     expect(sent.status).toBe(201);
     const month = new Date().toISOString().slice(0, 7);
@@ -390,7 +395,7 @@ describe("the admin API (C8.1)", () => {
     for (const body of ["Two", "Three"]) {
       const more = await rt.http(t.ownHost ?? "", "POST", "/v1/messages", {
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ body, contact: { name: "Rita" } }),
+        body: JSON.stringify({ body, contact: { name: "Rita", email: "rita@example.com" } }),
       });
       expect(more.status).toBe(201);
     }
@@ -428,7 +433,7 @@ describe("the admin API (C8.1)", () => {
     const send = async (body: string): Promise<string> => {
       const sent = await rt.http(host, "POST", "/v1/messages", {
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ body, contact: { name: "Rita" } }),
+        body: JSON.stringify({ body, contact: { name: "Rita", email: "rita@example.com" } }),
       });
       expect(sent.status).toBe(201);
       return (sent.json as { view: { item: { id: string } } }).view.item.id;

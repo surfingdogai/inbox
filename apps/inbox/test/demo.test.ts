@@ -19,7 +19,7 @@ import {
   wipeDemo,
 } from "../src/demo";
 import { localTime, seedSurfingDog } from "../src/seed";
-import { confirmed, confirmedTool, freshDb } from "./harness";
+import { clientOf, confirmed, confirmedTool, freshDb } from "./harness";
 
 /**
  * The public demo shop (INBOX_DEMO=1, src/demo.ts). Anyone's AI can book there and type anyone's
@@ -114,17 +114,27 @@ async function visit(s: Awaited<ReturnType<typeof demoInbox>>) {
   });
   const client = new Client({ name: "test-agent", version: "0" });
   await client.connect(transport);
-  const order = await confirmedTool((p) => client.callTool(p), {
+  // A line for something the shop does not sell is refused, and nothing of it is kept (ADR-048).
+  const unknown = await confirmedTool((p) => client.callTool(p), {
     name: "create_order",
     arguments: {
       payload: {
         orderedItem: [
-          { sku: "CH-9", name: PII.lineName, quantity: 2, price: { value: 1, currency: "EUR" } },
+          { sku: "CH-9", name: PII.lineName, quantity: 2 },
           { sku: "NOPE-1", name: PII.unknownLine, quantity: 1, price: { value: 500, currency: "EUR" } },
         ],
-        totalPrice: { value: 501, currency: "EUR" },
         notes: PII.message,
       },
+      contact,
+      idempotency_key: "demo-order-1",
+    },
+  });
+  expect(unknown.isError).toBe(true);
+  // What it sells, priced by the shop: the name a tester wrote is never the line's.
+  const order = await confirmedTool((p) => client.callTool(p), {
+    name: "create_order",
+    arguments: {
+      payload: { orderedItem: [{ sku: "CH-9", name: PII.lineName, quantity: 2 }], notes: PII.message },
       contact,
       idempotency_key: "demo-order-1",
     },
@@ -321,10 +331,8 @@ describe("demo mode", { timeout: 30_000 }, () => {
     expect(String(booking?.when)).toMatch(/^Sat \d{1,2} [A-Z][a-z]{2}, 09:00$/);
     const orders = feed.items.filter((i) => i.type === "order" && Number(i.at) >= t);
     expect(orders.every((o) => o.via === "MCP")).toBe(true);
-    expect(orders.map((o) => o.what).sort()).toEqual([
-      "1 × Brake pads, Shimano resin",
-      "2 × Chain, 9-speed, 1 item not in the catalogue",
-    ]);
+    // Each line by the shop's own name for what it sells (ADR-048): the names a tester wrote never show.
+    expect(orders.map((o) => o.what).sort()).toEqual(["1 × Brake pads, Shimano resin", "2 × Chain, 9-speed"]);
     expect(feed.items.find((i) => i.type === "quote_request" && i.via === "REST")?.what).toBe(
       "something made to order",
     );
@@ -451,11 +459,9 @@ describe("demo mode", { timeout: 30_000 }, () => {
       tone: "waiting",
       why: "a person prices every quote",
     });
-    // The order with a line not in the catalogue: outside what the rules accept.
-    expect(fresh.find((i) => i.type === "order" && String(i.what).includes("not in the catalogue"))).toMatchObject({
-      tone: "waiting",
-      why: "outside what the rules accept, so a person decides",
-    });
+    // An assistant's order names only what the shop sells (ADR-048): none of a visit's is "not in the catalogue".
+    expect(fresh.filter((i) => i.type === "order").length).toBeGreaterThan(0);
+    expect(fresh.some((i) => i.type === "order" && String(i.what).includes("not in the catalogue"))).toBe(false);
     // What the rules confirmed or accepted waits on nobody, and says no reason.
     for (const i of later.items.filter((x) => x.tone !== "waiting")) expect(i.why).toBeNull();
     for (const i of later.items.filter((x) => x.tone === "waiting" && /^(requested|received|open)$/.test(x.state)))
@@ -609,7 +615,9 @@ describe("demo mode", { timeout: 30_000 }, () => {
 
   it("holds each address to the demo's limit, and everyone to a shared one", async () => {
     const s = await demoInbox();
-    const message = (ip: string) => s.app.request(post("/v1/messages", { body: "Hello" }, { "cf-connecting-ip": ip }));
+    // Each from a tester's made-up name and number, as assistants bring them (ADR-048).
+    const message = (ip: string) =>
+      s.app.request(post("/v1/messages", { body: "Hello", contact: clientOf() }, { "cf-connecting-ip": ip }));
     const cap = DEMO_LIMITS.create?.capacity ?? 0;
     for (let i = 0; i < cap; i++) expect((await message("192.0.2.10")).status, `message ${i + 1}`).toBe(201);
     expect((await message("192.0.2.10")).status).toBe(429);

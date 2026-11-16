@@ -14,7 +14,7 @@ import {
 } from "@surfingdog/core";
 import { describe, expect, it } from "vitest";
 import { type App, createInbox } from "../src/app";
-import { freshDb, futureDay, openWeekdays } from "./harness";
+import { confirmed, freshDb, futureDay, openWeekdays } from "./harness";
 
 /**
  * Receipts through the doors an agent actually uses (ADR-016): REST to book, the owner's API to
@@ -36,6 +36,8 @@ async function setup() {
     durationMin: 90,
     capacity: 1,
     granularityMin: 30,
+    // The business's price: an assistant leaves the total to it (ADR-048).
+    price: { model: "fixed", value: 4500, currency: "EUR" },
     createdAt: T0,
     updatedAt: T0,
   });
@@ -101,27 +103,28 @@ interface Receipt {
 }
 
 async function bookAndConfirm(s: Awaited<ReturnType<typeof setup>>) {
-  const created = await s.app.request(
+  // At the business's price, once the person confirmed its summary.
+  const created = await confirmed(
+    (r) => s.app.request(r),
     jsonPost("/v1/bookings", {
       payload: {
         reservationFor: { serviceId: s.svc, name: "Full service" },
         startTime: `${DAY}T08:00:00Z`,
         endTime: `${DAY}T09:30:00Z`,
-        totalPrice: { value: 4500, currency: "EUR" },
       },
       contact: { name: "Rita", email: "rita@example.com" },
     }),
   );
   expect(created.status).toBe(201);
   const body = (await created.json()) as { view: { item: { id: string } }; accessToken: string };
-  const confirmed = await s.app.request(
+  const confirmation = await s.app.request(
     jsonPost(
       `/v1/owner/items/${body.view.item.id}/transitions`,
       { event: "confirm" },
       { authorization: `Bearer ${s.ownerKey}` },
     ),
   );
-  expect(confirmed.status).toBe(200);
+  expect(confirmation.status).toBe(200);
   // A request starts a run of its own after it answers (in workerd one may still be going, and a
   // call meanwhile joins it): drain until nothing more is due, so the confirmation's jobs have run.
   for (let i = 0; i < 5; i++) {

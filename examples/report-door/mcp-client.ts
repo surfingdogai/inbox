@@ -51,7 +51,10 @@ console.log(
 );
 // A booking, the same way: op from the capability vocabulary, tool as the door named it.
 //   await trackDoor({ ...report, op: "book", tool: "create_booking" }, () =>
-//     shop.callTool({ name: "create_booking", arguments: { service: "repair", start_time: "…" } }));
+//     shop.callTool({
+//       name: "create_booking",
+//       arguments: { service: "repair", start_time: "…", contact: { name: "Rita Silva", email: "rita@example.com" } },
+//     }));
 
 // 3. Send what is queued before the process ends (in a Worker: ctx.waitUntil(flushDoorReports())).
 await flushDoorReports();

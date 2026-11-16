@@ -42,6 +42,7 @@ import {
   kindOf,
   offerModeFor,
   offerSections,
+  orderable,
   quickKind,
   savedDoors,
   setupKeyOfSaved,
@@ -196,6 +197,37 @@ describe("the setup's doors", () => {
     }
   });
 
+  it("says ordering is open only with a product an order can name: at a fixed price, on sale, in the business's currency", () => {
+    const now = Date.parse("2026-11-16T09:00:00Z");
+    const product = (p: Partial<Parameters<typeof orderable>[0][number]> = {}) => ({
+      active: 1,
+      price: { value: 900, currency: "EUR" },
+      ...p,
+    });
+    // A catalogue priced on request, from or as a range opens no ordering; neither does one off sale, past its last
+    // day, or priced in another currency.
+    const none = [
+      product({ priceModel: "quote" }),
+      product({ priceModel: "from" }),
+      product({ priceModel: "range" }),
+      product({ active: 0 }),
+      product({ availableUntil: now - 1 }),
+      product({ price: { value: 900, currency: "USD" } }),
+    ];
+    expect(orderable(none, "EUR", now)).toBe(0);
+    expect(doorRows(kindOf("shop"), orderable(none, "EUR", now)).find((d) => d.key === "products")?.label).toBe(
+      "You sell products",
+    );
+    // One at a fixed price, from before catalogue version 2 too: said, and how many.
+    const two = [...none, product(), product({ priceModel: "fixed" })];
+    expect(orderable(two, "EUR", now)).toBe(2);
+    const row = doorRows(kindOf("shop"), orderable(two, "EUR", now)).find((d) => d.key === "products");
+    expect(row?.label).toBe("Agents can order your products");
+    expect(row?.line).toBe(
+      "2 at a fixed price, at your prices and stock. Ordering stays open while one is on sale at a fixed price: Settings → Products.",
+    );
+  });
+
   it("starts each kind with its own doors: a shop's products, a place's stays, a price of their own off", () => {
     expect(defaultDoors(kindOf("shop"))).toMatchObject({
       products: true,
@@ -259,7 +291,7 @@ describe("the setup's doors", () => {
     expect(row(0)).toMatchObject({ label: "You sell products" });
     expect(row(0)?.fixed).toBeUndefined();
     expect(row(2)).toMatchObject({ label: "Agents can order your products", fixed: true });
-    expect(row(2)?.line).toContain("2 listed");
+    expect(row(2)?.line).toContain("2 at a fixed price");
     // Re-run as a salon with one product: ordering reads on, and the offer step still asks for products.
     const salon = kindOf("appointments");
     const doors = withListed(defaultDoors(salon), salon, 1);

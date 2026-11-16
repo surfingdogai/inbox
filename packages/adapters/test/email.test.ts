@@ -124,9 +124,11 @@ describe("email door", () => {
       tier: "verified_principal",
       sandbox: false,
     };
+    // It lists nothing yet, and takes requests for a price in their own words (ADR-048).
+    await caps.updateSettings(owner, { doc: { doors: { quoteRequest: true } } });
     const q = await caps.requestQuote(customer, {
       payload: { itemOffered: { name: "Wheel rebuild" }, description: "Rear wheel" },
-      contact: { email: "rita@example.com" },
+      contact: { name: "Rita", email: "rita@example.com" },
     });
     const id = q.view.item.id;
     await transitionItem(db, owner, { itemId: id, event: "request_info", input: { note: "How many spokes?" } });
@@ -260,7 +262,12 @@ describe("email door", () => {
       now: () => T,
     };
     await caps.updateSettings(owner, {
-      doc: { business: { name: "Oficina Maré" }, email: { fromAddress: "hello@oficinamare.pt" } },
+      doc: {
+        business: { name: "Oficina Maré" },
+        email: { fromAddress: "hello@oficinamare.pt" },
+        // It lists nothing yet, and takes requests for a price in their own words (ADR-048).
+        doors: { quoteRequest: true },
+      },
     });
     const mail = logMailOut();
     const runner = createRunner({ mailOut: mail });
@@ -269,7 +276,7 @@ describe("email door", () => {
     };
     const q = await caps.requestQuote(customer, {
       payload: { itemOffered: { name: "Wheel rebuild" }, description: "Rear wheel" },
-      contact: { email: "rita@example.com" },
+      contact: { name: "Rita", email: "rita@example.com" },
     });
     const id = q.view.item.id;
     await transitionItem(db, owner, { itemId: id, event: "request_info", input: { note: "How many spokes?" } });

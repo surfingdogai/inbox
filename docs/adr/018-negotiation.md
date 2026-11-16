@@ -250,6 +250,9 @@ stays open under another name. Nothing is refused, and an integration that sent 
 now gets the business's back. When offers land, `customerStatedPrice` becomes the customer's offer
 as above. Rewards (§4) come with offers, not with the fix.
 
+> Amended by [ADR-048](048-client-details-and-real-orders.md) (15 November 2026): an assistant's order line names a
+> product the business sells at a fixed price, and a price it sends is the business's unless price counters are on.
+
 ### 3.3 Quote request
 
 `quote` (owners; received, needs_info, quoted → quoted) needs `valid_through` (default

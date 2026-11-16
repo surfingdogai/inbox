@@ -1,5 +1,6 @@
 import type { SqliteClient } from "@surfingdog/platform";
 import type { Capabilities } from "../src/capabilities/service";
+import type { Contact } from "../src/domain/types";
 import type { Caller } from "../src/write/caller";
 import { WriteError } from "../src/write/errors";
 
@@ -31,13 +32,93 @@ export async function resetTables(client: SqliteClient): Promise<void> {
   ]);
 }
 
+/** A fake number no one answers, a new one per call, so two test requests never match as one customer by phone. */
+let phones = 0;
+export const testPhone = () => `+1 555 ${String(++phones).padStart(6, "0")}`;
+
+/** The number a request sent with an idempotency key is given: the same on its retry, so the retry is the same request. */
+const keyedPhones = new Map<string, string>();
+function phoneFor(key: string | undefined): string {
+  if (!key) return testPhone();
+  const known = keyedPhones.get(key);
+  if (known) return known;
+  const phone = testPhone();
+  keyedPhones.set(key, phone);
+  return phone;
+}
+
+/**
+ * `contact` as an assistant brings it (ADR-048): a name when it has none, and a fake phone when it has no email
+ * and no phone. A phone, not an email: it adds no acknowledgement email, no network key and no spam handle, so a
+ * test that sent no contact behaves as before. `key`, the request's idempotency key: its retry gets the same number.
+ */
+export function clientOf(contact?: Contact | undefined, key?: string | undefined): Contact {
+  return {
+    ...contact,
+    name: contact?.name || "Ana Test",
+    ...(contact?.email || contact?.phone ? {} : { phone: phoneFor(key) }),
+  };
+}
+
+/**
+ * Capabilities whose assistants bring their person's details (ADR-048): requestQuote, createBooking, createOrder,
+ * sendMessage without item_id and stays.request / stays.hold get `clientOf(contact)` for a `customer_agent` caller.
+ * For tests about something else; the client rule's own tests use the capabilities as they are.
+ */
+export function withClient<C extends Capabilities>(caps: C): C {
+  const filled = <I>(caller: Caller, input: I): I => {
+    if (caller.actor.kind !== "customer_agent" || !input || typeof input !== "object") return input;
+    const i = input as { contact?: Contact; item_id?: unknown; idempotency_key?: string };
+    if (i.item_id !== undefined) return input;
+    return { ...input, contact: clientOf(i.contact, i.idempotency_key) };
+  };
+  const wrap =
+    <I, R, O>(fn: (caller: Caller, input: I, opts?: O) => Promise<R>) =>
+    (caller: Caller, input: I, opts?: O): Promise<R> =>
+      fn(caller, filled(caller, input), opts);
+  caps.requestQuote = wrap(caps.requestQuote.bind(caps));
+  caps.createBooking = wrap(caps.createBooking.bind(caps));
+  caps.createOrder = wrap(caps.createOrder.bind(caps));
+  caps.sendMessage = wrap(caps.sendMessage.bind(caps)) as typeof caps.sendMessage;
+  const stays = caps.stays;
+  const request = stays.request.bind(stays);
+  const hold = stays.hold.bind(stays);
+  stays.request = (caller, raw) => request(caller, filled(caller, raw));
+  stays.hold = (caller, raw) => hold(caller, filled(caller, raw));
+  return caps;
+}
+
+/**
+ * A product on sale at a fixed price, made by the owner, for a test that orders (ADR-048: an assistant's order
+ * names a product the business sells). Its id.
+ */
+export async function aProduct(
+  caps: Capabilities,
+  p: { readonly name?: string; readonly value: number; readonly currency?: string; readonly sku?: string },
+): Promise<string> {
+  const owner: Caller = {
+    actor: { kind: "owner", id: "owner", channel: "owner_ui" },
+    tier: "verified_principal",
+    sandbox: false,
+  };
+  const made = await caps.setup.createProduct(owner, {
+    name: p.name ?? "Bread",
+    price: { value: p.value, currency: p.currency ?? "EUR" },
+    active: true,
+    ...(p.sku ? { sku: p.sku } : {}),
+  });
+  return made.id;
+}
+
 /**
  * Capabilities whose customers say yes at the confirm step (ADR-018 §5): a priced booking or order
  * asked for without `terms_sha` is sent again with the fingerprint its `confirm_terms` answer gave,
- * as an assistant does once its person confirmed the summary. For tests about something else; the
- * confirm step's own tests use the capabilities as they are.
+ * as an assistant does once its person confirmed the summary. Their assistants bring their person's
+ * details too (`withClient`). For tests about something else; the confirm step's own tests use the
+ * capabilities as they are.
  */
 export function confirming<C extends Capabilities>(caps: C): C {
+  withClient(caps);
   const again =
     <I extends { terms_sha?: string | undefined }, R, O>(fn: (caller: Caller, input: I, opts?: O) => Promise<R>) =>
     async (caller: Caller, input: I, opts?: O): Promise<R> => {

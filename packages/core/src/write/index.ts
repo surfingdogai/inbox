@@ -1,4 +1,5 @@
 export * from "./caller";
+export * from "./client";
 export { type CorrectionFacts, correctionFacts, deadCorrections, hiddenTransitions } from "./corrections";
 export { type CreateInput, type CreateResult, createItem } from "./create";
 export * from "./errors";
@@ -23,6 +24,7 @@ export {
   pruneIdempotencyKeys,
   strongIdempotencyKey,
 } from "./idempotency";
+export { checkBookingPrice, checkOrderLines, checkQuoteRequest } from "./pricing";
 export { bucketsFor, MAX_BUCKETS } from "./slots";
 export { appendThreadEntry } from "./thread";
 export { type TransitionInput, type TransitionResult, transitionItem } from "./transition";

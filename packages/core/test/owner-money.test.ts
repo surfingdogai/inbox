@@ -6,7 +6,7 @@ import { createDb } from "../src/db";
 import { ulid } from "../src/ids";
 import { MIGRATIONS } from "../src/schema/migrations.generated";
 import { business, items, products, services } from "../src/schema/tables";
-import { type Caller, WriteError } from "../src/write/index";
+import { type Caller, createItem, WriteError } from "../src/write/index";
 import { confirming, makeClient, openWeekdays, resetTables } from "./harness";
 
 /**
@@ -115,7 +115,9 @@ describe("the owner's AI and the customer's price", () => {
     const ours = await s.book(s.svc.fixed);
     await s.caps.transitionItem(ai, { item_id: ours.view.item.id, event: "confirm" });
     expect(await stateOf(s.db, ours.view.item.id)).toBe("confirmed");
-    // Money no: a service priced "from", with the customer's figure in it.
+    // Money no: a service priced "from", with the customer's figure in it (their offer, where the business takes
+    // one: an assistant's own price is refused where it does not, ADR-048).
+    await s.caps.updateSettings(person, { doc: { negotiation: { priceCounters: true } } });
     const theirs = await s.book(s.svc.from, { totalPrice: EUR(100) });
     for (const caller of [ai, mcp]) {
       const e = await refusal(s.caps.transitionItem(caller, { item_id: theirs.view.item.id, event: "confirm" }));
@@ -131,7 +133,9 @@ describe("the owner's AI and the customer's price", () => {
 
   it("never accepts an order with a line the customer priced; the owner can", async () => {
     const s = await setup();
-    const order = await s.caps.createOrder(customer, {
+    // A line naming no product, as the business's own records hold one: an assistant names only what it sells (ADR-048).
+    const order = await createItem(s.db, customer, {
+      type: "order",
       payload: { orderedItem: [{ name: "Child seat", quantity: 1, price: EUR(100) }], totalPrice: EUR(100) },
     });
     const e = await refusal(s.caps.transitionItem(ai, { item_id: order.view.item.id, event: "accept" }));

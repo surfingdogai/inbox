@@ -1,6 +1,14 @@
 import { eq, inArray } from "drizzle-orm";
 import type { Db } from "../db";
-import type { Item, ItemType, Money, PayloadOf, Personalised } from "../domain/types";
+import {
+  type Item,
+  type ItemType,
+  type Money,
+  type OrderRequestPayload,
+  orderRequestPayloadSchema,
+  type PayloadOf,
+  type Personalised,
+} from "../domain/types";
 import { orderExtras } from "../kitchen/order";
 import { priceOptions } from "../menu/options";
 import { menuOf } from "../menu/schema";
@@ -8,7 +16,8 @@ import { floorsFor } from "../negotiation/catalogue";
 import { type Reward, rewardFor, rewardPrice, type Standing } from "../negotiation/rewards";
 import { business, products, services } from "../schema/tables";
 import { readSettings } from "../settings/schema";
-import { type FieldProblem, WriteError } from "./errors";
+import { moneyText, servicePriceText } from "../util/money";
+import { type FieldProblem, fromZod, WriteError } from "./errors";
 
 /** A customer's create, priced: the payload to store, and whether any of its price is not the business's. */
 export interface Priced {
@@ -43,7 +52,7 @@ export async function priceFromCatalogue(
   now: number = Date.now(),
 ): Promise<Priced> {
   if (type === "booking") return priceBooking(db, payload as PayloadOf<"booking">, pricing);
-  if (type === "order") return priceOrder(db, payload as PayloadOf<"order">, pricing, now);
+  if (type === "order") return priceOrder(db, payload as OrderRequestPayload, pricing, now);
   return { payload, unpriced: false };
 }
 
@@ -234,9 +243,18 @@ async function serviceTotal(db: Db, price: ServicePrice, partySize: number | und
   return { value, currency: (price.currency ?? (await businessCurrency(db))).toUpperCase() };
 }
 
+/** One line of an order as it is stored: named and priced. */
+type OrderLine = PayloadOf<"order">["orderedItem"][number];
+
+/**
+ * An order priced from the catalogue. It reads an order as a customer's request may send it
+ * (`orderRequestPayloadSchema`, ADR-048): a line without a price, or an order without a total, states no
+ * price of the customer's, and the catalogue gives both. A line the catalogue does not price keeps what
+ * it was sent; one sent without a price is refused when the order is stored, which reads it strictly.
+ */
 async function priceOrder(
   db: Db,
-  payload: PayloadOf<"order">,
+  payload: OrderRequestPayload,
   pricing: PricingFor | undefined,
   now: number,
 ): Promise<Priced> {
@@ -253,7 +271,7 @@ async function priceOrder(
   const clash: FieldProblem[] = [];
   const offSale: FieldProblem[] = [];
   const optionProblems: FieldProblem[] = [];
-  const orderedItem: PayloadOf<"order">["orderedItem"] = [];
+  const orderedItem: OrderLine[] = [];
   lines.forEach((line, i) => {
     const byId = line.productId !== undefined ? catalogue.byId.get(line.productId) : undefined;
     const bySku = line.sku !== undefined ? catalogue.bySku.get(line.sku) : undefined;
@@ -267,7 +285,7 @@ async function priceOrder(
     const product = byId ?? bySku;
     if (!product) {
       unpriced = true;
-      orderedItem.push(line);
+      orderedItem.push(line as OrderLine);
       return;
     }
     // A product taken off sale, or past the last moment it could be ordered (catalogue version 2's
@@ -283,7 +301,7 @@ async function priceOrder(
       unpriced = true;
       const { sku: _sku, options: _opts, ...kept } = line;
       const sku = product.sku !== null && product.sku.length <= 100 ? { sku: product.sku } : {};
-      orderedItem.push({ ...kept, productId: product.id, ...sku, name: clip(product.name, 200) });
+      orderedItem.push({ ...kept, productId: product.id, ...sku, name: clip(product.name, 200) } as OrderLine);
       return;
     }
     // A menu item's options are priced from the business's menu (ADR-040): what each adds, per unit,
@@ -320,9 +338,10 @@ async function priceOrder(
       ...(rewarded ? { listPrice: list } : {}),
       ...(opts?.options.length ? { options: opts.options } : {}),
     };
-    // A line the assistant wrote at the list price is not a price of the customer's: they pay theirs.
+    // A line the assistant wrote at the list price is not a price of the customer's: they pay theirs. A line
+    // sent without a price states none (ADR-048).
     orderedItem.push(
-      sameMoney(line.price, ours) || sameMoney(line.price, list)
+      line.price === undefined || sameMoney(line.price, ours) || sameMoney(line.price, list)
         ? named
         : { ...named, customerStatedPrice: line.price },
     );
@@ -348,6 +367,8 @@ async function priceOrder(
   const problems: FieldProblem[] = [];
   let total = 0;
   orderedItem.forEach((l, i) => {
+    // A line the catalogue does not price, sent without a price: the stored order's own read refuses it.
+    if (l.price === undefined) return;
     if (l.price.currency !== currency) {
       problems.push({
         path: `payload.orderedItem.${i}.price.currency`,
@@ -397,13 +418,375 @@ async function priceOrder(
       ...(extras.tip ? { tip: extras.tip } : {}),
       orderedItem,
       totalPrice: ours,
-      ...(sameMoney(stated, ours) || (personalised && sameMoney(stated, personalised.listPrice))
+      // An order sent without a total states none (ADR-048).
+      ...(stated === undefined || sameMoney(stated, ours) || (personalised && sameMoney(stated, personalised.listPrice))
         ? {}
         : { customerStatedPrice: stated }),
       ...(personalised ? { personalised } : {}),
     },
     unpriced,
   };
+}
+
+/**
+ * An assistant's booking as the business takes it (ADR-048): a total it sends is the business's to give. One in
+ * another currency than ours (the service's price's, else the business's) is refused, naming ours. One for a
+ * service we do not sell at a fixed price (priced from, or with no price) is a price the assistant made up, refused
+ * unless the business takes a price of the customer's own (`negotiation.priceCounters`, ADR-018 Q1), when it is
+ * their offer, as before. A different total for a fixed-price service is only noted for the business, never the
+ * price (`priceBooking`).
+ */
+export async function checkBookingPrice(
+  db: Db,
+  payload: {
+    readonly reservationFor: { readonly serviceId: string };
+    readonly totalPrice?: Money | undefined;
+    readonly partySize?: number | undefined;
+  },
+  o: { readonly counters: boolean },
+): Promise<void> {
+  const stated = payload.totalPrice;
+  if (!stated) return;
+  const [row] = await db.orm
+    .select({ name: services.name, price: services.price })
+    .from(services)
+    .where(eq(services.id, payload.reservationFor.serviceId));
+  const service = await servicePricing(db, payload.reservationFor.serviceId, payload.partySize);
+  const ours = await businessCurrency(db);
+  const currency = (service?.list?.currency ?? ours).toUpperCase();
+  if (stated.currency.toUpperCase() !== currency) {
+    throw new WriteError(
+      "invalid_input",
+      `Our prices are in ${currency}: send totalPrice in ${currency}, or leave it out and we price the booking. Nothing was written.`,
+      {
+        fields: [
+          {
+            path: "payload.totalPrice.currency",
+            problem: "invalid",
+            message: `must be ${currency}, the currency of our prices`,
+          },
+        ],
+        details: { reason: "currency_not_ours", currency },
+      },
+    );
+  }
+  if (service?.list || o.counters || !row) return;
+  const price = servicePriceText(row.price, ours);
+  throw new WriteError(
+    "invalid_input",
+    `We price ${row.name} ${price ? `${price}, so its total is ours to give` : "ourselves"}: leave totalPrice out, and we tell your person the price. Nothing was written.`,
+    {
+      fields: [{ path: "payload.totalPrice", problem: "invalid", message: "leave it out: we price this service" }],
+      details: { reason: "price_not_ours" },
+    },
+  );
+}
+
+/**
+ * An assistant's request for a price as the business takes it (ADR-048): a product or a service it names
+ * (`itemOffered.productId`, `sku` or `serviceId`) is one the business has on offer, and a budget it carries
+ * (`budget`, `job.budgetMax`) is in the business's currency. Something asked about in the person's own words
+ * (`itemOffered.name` alone) is what a request for a price is for, and is taken.
+ */
+export async function checkQuoteRequest(db: Db, payload: unknown): Promise<void> {
+  const p = (payload ?? {}) as {
+    readonly itemOffered?: { readonly productId?: unknown; readonly sku?: unknown; readonly serviceId?: unknown };
+    readonly budget?: Money | undefined;
+    readonly job?: { readonly budgetMax?: Money | undefined } | undefined;
+  };
+  const named = p.itemOffered ?? {};
+  if (typeof named.productId === "string" || typeof named.sku === "string") {
+    const byId = typeof named.productId === "string";
+    const [row] = await db.orm
+      .select({ active: products.active })
+      .from(products)
+      .where(byId ? eq(products.id, named.productId as string) : eq(products.sku, named.sku as string))
+      .limit(1);
+    if (!row || row.active === 0) {
+      throw new WriteError(
+        "invalid_input",
+        "We have no product by that id or sku on offer: name one of ours from list_products, or leave it out and say what your person needs in itemOffered.name. Nothing was written.",
+        {
+          fields: [
+            {
+              path: byId ? "payload.itemOffered.productId" : "payload.itemOffered.sku",
+              problem: "invalid",
+              message: "no such product here",
+            },
+          ],
+          details: { reason: "unknown_product" },
+        },
+      );
+    }
+  }
+  if (typeof named.serviceId === "string") {
+    const [row] = await db.orm
+      .select({ active: services.active })
+      .from(services)
+      .where(eq(services.id, named.serviceId));
+    if (!row || row.active === 0) {
+      throw new WriteError(
+        "invalid_input",
+        "We have no service by that id on offer: name one of ours from list_services, or leave it out and say what your person needs in itemOffered.name. Nothing was written.",
+        {
+          fields: [{ path: "payload.itemOffered.serviceId", problem: "invalid", message: "no such service here" }],
+          details: { reason: "unknown_service" },
+        },
+      );
+    }
+  }
+  const currency = (await businessCurrency(db)).toUpperCase();
+  const foreign: FieldProblem[] = [];
+  if (p.budget && p.budget.currency.toUpperCase() !== currency) {
+    foreign.push({ path: "payload.budget.currency", problem: "invalid", message: `must be ${currency}` });
+  }
+  if (p.job?.budgetMax && p.job.budgetMax.currency.toUpperCase() !== currency) {
+    foreign.push({ path: "payload.job.budgetMax.currency", problem: "invalid", message: `must be ${currency}` });
+  }
+  if (foreign.length) {
+    throw new WriteError(
+      "invalid_input",
+      `Our prices are in ${currency}: give your person's budget in ${currency}, or leave it out. Nothing was written.`,
+      { fields: foreign, details: { reason: "currency_not_ours", currency } },
+    );
+  }
+}
+
+/**
+ * The business's own order as it may write it (ADR-048): a line naming a product of its catalogue (`productId`,
+ * else `sku`) may leave its name and its price to the catalogue, a fixed price with what its options add, and the
+ * order may leave its total, the lines' prices times their quantities when they are in one currency. What it wrote
+ * stands as it wrote it; what the catalogue cannot give is refused when the order is read strictly.
+ */
+export async function completeOrder(db: Db, payload: OrderRequestPayload): Promise<Record<string, unknown>> {
+  const lines = payload.orderedItem;
+  const catalogue = await productsFor(db, lines);
+  const priced = await linePricing(db, lines);
+  const orderedItem = lines.map((line, i) => {
+    const product =
+      (line.productId !== undefined ? catalogue.byId.get(line.productId) : undefined) ??
+      (line.sku !== undefined ? catalogue.bySku.get(line.sku) : undefined);
+    if (!product) return line;
+    const list = priced[i]?.productId === product.id ? priced[i]?.list : undefined;
+    return {
+      ...line,
+      ...(line.name === undefined ? { name: clip(product.name, 200) } : {}),
+      ...(line.price === undefined && list ? { price: list } : {}),
+    };
+  });
+  if (payload.totalPrice !== undefined) return { ...payload, orderedItem };
+  const currency = orderedItem[0]?.price?.currency.toUpperCase();
+  let total = 0;
+  for (const l of orderedItem) {
+    if (!l.price || l.price.currency.toUpperCase() !== currency) return { ...payload, orderedItem };
+    total += l.price.value * l.quantity;
+  }
+  if (currency === undefined || !Number.isSafeInteger(total)) return { ...payload, orderedItem };
+  return { ...payload, orderedItem, totalPrice: { value: total, currency } };
+}
+
+/** The catalogue names of `names`, as a sentence lists them: "Bread", "Bread and Wine", "Bread, Wine and Oil". */
+function listed(names: readonly string[]): string {
+  return names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : (names[0] ?? "");
+}
+
+/** How a product is priced, said of it, when it is not ordered here: "priced from €90.00", "priced on request". */
+function pricedWords(product: CatalogueProduct, ours: string): string {
+  const currency = product.price.currency.toUpperCase();
+  if (product.priceModel === "quote") return "priced on request";
+  if (currency !== ours) return `priced in ${currency}, not in ${ours}, our currency`;
+  if (product.priceModel === "range" && product.priceMax) {
+    return `priced from ${moneyText(product.price)} to ${moneyText(product.priceMax)}`;
+  }
+  if (product.priceModel === "from" || product.priceModel === "range") return `priced from ${moneyText(product.price)}`;
+  return "priced on request";
+}
+
+/**
+ * An assistant's order as the business takes it (ADR-048): each line names a product it sells (`productId`, else
+ * `sku`), on sale, priced `fixed` in the business's own currency, and a price or a total the request carries is the
+ * business's, in that currency. While the business takes a customer's own price (`negotiation.priceCounters`,
+ * ADR-018 Q1) a different price in its currency is their offer and is kept as before. Throws the first refusal that
+ * applies, naming every line it holds for, and what to do next: `ask`, the door to ask the business about a product
+ * it does not sell here, when it takes one (`request_quote`, else `send_message`).
+ */
+export async function checkOrderLines(
+  db: Db,
+  payload: unknown,
+  o: {
+    readonly pricing?: PricingFor | undefined;
+    readonly now: number;
+    readonly counters: boolean;
+    readonly ask?: "request_quote" | "send_message" | null | undefined;
+  },
+): Promise<void> {
+  const parsed = orderRequestPayloadSchema.safeParse(payload);
+  if (!parsed.success) throw fromZod(parsed.error, "payload");
+  const lines = parsed.data.orderedItem;
+  const catalogue = await productsFor(db, lines);
+  const ours = (await businessCurrency(db)).toUpperCase();
+  const ask = o.ask === undefined ? "request_quote" : o.ask;
+  const at = (i: number) => `payload.orderedItem.${i}`;
+  /** Lines naming no product, and lines naming one we do not have, in the order they came. */
+  const unnamed: { i: number; problem: FieldProblem }[] = [];
+  const unknown: { i: number; problem: FieldProblem }[] = [];
+  const offSale: { i: number; product: CatalogueProduct }[] = [];
+  const notHere: { i: number; product: CatalogueProduct }[] = [];
+  lines.forEach((line, i) => {
+    if (line.productId === undefined && line.sku === undefined) {
+      unnamed.push({
+        i,
+        problem: {
+          path: `${at(i)}.productId`,
+          problem: "missing",
+          message: "one of our products, by its id from list_products",
+        },
+      });
+      return;
+    }
+    const product =
+      (line.productId !== undefined ? catalogue.byId.get(line.productId) : undefined) ??
+      (line.sku !== undefined ? catalogue.bySku.get(line.sku) : undefined);
+    if (!product) {
+      unknown.push({
+        i,
+        problem: {
+          path: line.productId !== undefined ? `${at(i)}.productId` : `${at(i)}.sku`,
+          problem: "invalid",
+          message: "no such product here",
+        },
+      });
+      return;
+    }
+    if (product.active === 0 || (product.availableUntil !== null && product.availableUntil <= o.now)) {
+      offSale.push({ i, product });
+      return;
+    }
+    // Sold at a fixed price, in our currency: anything else is asked about, never ordered here.
+    if (product.priceModel !== "fixed" || product.price.currency.toUpperCase() !== ours) notHere.push({ i, product });
+  });
+  if (unknown.length) {
+    throw new WriteError(
+      "invalid_input",
+      "We sell no product by that id or sku: name one of ours on each line, by its productId from list_products. Nothing was written.",
+      {
+        fields: [...unknown, ...unnamed].sort((a, b) => a.i - b.i).map((l) => l.problem),
+        details: { reason: "unknown_product" },
+      },
+    );
+  }
+  if (unnamed.length) {
+    throw new WriteError(
+      "invalid_input",
+      "Each line of an order names one of our products, by its productId from list_products (or its sku). Nothing was written.",
+      { fields: unnamed.map((l) => l.problem), details: { reason: "product_missing" } },
+    );
+  }
+  const names = (rows: readonly { product: CatalogueProduct }[]) => [
+    ...new Map(rows.map(({ product }) => [product.id, product.name])).values(),
+  ];
+  if (offSale.length) {
+    const gone = names(offSale);
+    throw new WriteError(
+      "invalid_input",
+      `We no longer sell ${listed(gone)}: leave ${gone.length > 1 ? "those lines" : "that line"} out, or ask your person to choose another product from list_products. Nothing was written.`,
+      {
+        fields: offSale.map(({ i }) => ({
+          path: at(i),
+          problem: "invalid" as const,
+          message: "not on sale: leave this line out",
+        })),
+        details: { reason: "not_on_sale" },
+      },
+    );
+  }
+  if (notHere.length) {
+    const said = [
+      ...new Map(
+        notHere.map(({ product }) => [product.id, `${product.name} is ${pricedWords(product, ours)}`]),
+      ).values(),
+    ];
+    const next =
+      ask === "request_quote"
+        ? ": ask for a price with request_quote (itemOffered.productId)"
+        : ask === "send_message"
+          ? ": ask us about it with send_message"
+          : "";
+    throw new WriteError(
+      "invalid_input",
+      `${listed(said)}, so ${said.length > 1 ? "they are" : "it is"} not ordered here${next}. Nothing was written.`,
+      {
+        fields: notHere.map(({ i, product }) => ({
+          path: `${at(i)}.productId`,
+          problem: "invalid" as const,
+          message: `${pricedWords(product, ours)}${ask === "request_quote" ? ": ask with request_quote" : ": not ordered here"}`,
+        })),
+        details: { reason: "not_priced" },
+      },
+    );
+  }
+  const priced = await priceOrder(db, parsed.data, o.pricing, o.now);
+  const total = priced.payload.totalPrice as Money | undefined;
+  if (!total) return;
+  // Every line is ours by now, in our currency: the order's total is too.
+  const currency = ours;
+  const foreign: FieldProblem[] = [];
+  lines.forEach((line, i) => {
+    if (line.price && line.price.currency.toUpperCase() !== currency) {
+      foreign.push({
+        path: `${at(i)}.price.currency`,
+        problem: "invalid",
+        message: `must be ${currency}, the currency of our prices`,
+      });
+    }
+  });
+  const sentTotal = parsed.data.totalPrice;
+  if (sentTotal && sentTotal.currency.toUpperCase() !== currency) {
+    foreign.push({
+      path: "payload.totalPrice.currency",
+      problem: "invalid",
+      message: `must be ${currency}, the currency of our prices`,
+    });
+  }
+  if (foreign.length) {
+    throw new WriteError(
+      "invalid_input",
+      `Our prices are in ${currency}: send each price and the total in ${currency}, or leave them out and we price the order. Nothing was written.`,
+      { fields: foreign, details: { reason: "currency_not_ours", currency } },
+    );
+  }
+  // A price of the customer's own is their offer where the business takes one (ADR-018 Q1): kept, as before.
+  if (o.counters) return;
+  const pricedLines = (priced.payload as PayloadOf<"order">).orderedItem;
+  const notOurs = pricedLines.flatMap((line, i) => (line.customerStatedPrice ? [{ i, line }] : []));
+  if (notOurs.length) {
+    const ours = (line: OrderLine) => line.listPrice ?? line.price;
+    throw new WriteError(
+      "invalid_input",
+      `A price on this order is not ours: ${notOurs.map(({ line }) => `${line.name} is ${moneyText(ours(line))} each`).join("; ")}. Send our prices, or leave price out and we price each line. Nothing was written.`,
+      {
+        fields: notOurs.map(({ i, line }) => ({
+          path: `${at(i)}.price`,
+          problem: "invalid" as const,
+          message: `ours is ${moneyText(ours(line))}`,
+        })),
+        details: {
+          reason: "price_not_ours",
+          prices: notOurs.map(({ i, line }) => ({ line: i, product_id: line.productId, price: ours(line) })),
+        },
+      },
+    );
+  }
+  if ((priced.payload as PayloadOf<"order">).customerStatedPrice) {
+    throw new WriteError(
+      "invalid_input",
+      `This order comes to ${moneyText(total)}: send that as totalPrice, or leave totalPrice out and we work it out. Nothing was written.`,
+      {
+        fields: [{ path: "payload.totalPrice", problem: "invalid", message: `ours is ${moneyText(total)}` }],
+        details: { reason: "total_not_ours", total },
+      },
+    );
+  }
 }
 
 /**
@@ -540,6 +923,8 @@ interface CatalogueProduct {
   readonly menu: unknown;
   /** How its price is meant (catalogue version 2): only `fixed` prices an order line. */
   readonly priceModel: string;
+  /** Where a `range` price ends. */
+  readonly priceMax: Money | null;
   /** A pre-order, a back-order or made to order, which its stock does not hold back. */
   readonly availability: string | null;
   /** The last moment it can be ordered, in milliseconds. */
@@ -564,6 +949,7 @@ async function productsFor(db: Db, lines: readonly { productId?: string | undefi
     stock: products.stock,
     menu: products.menu,
     priceModel: products.priceModel,
+    priceMax: products.priceMax,
     availability: products.availability,
     availableUntil: products.availableUntil,
   };
@@ -585,7 +971,8 @@ async function productsFor(db: Db, lines: readonly { productId?: string | undefi
 }
 
 /** The currency a price without one is in: the business's, as its profile gives it. */
-async function businessCurrency(db: Db): Promise<string> {
+/** The business's own currency, as its profile publishes it: what its prices, and an order's, are in (ADR-048). */
+export async function businessCurrency(db: Db): Promise<string> {
   const [row] = await db.orm.select({ currency: business.currency }).from(business).limit(1);
   return row?.currency || (await readSettings(db)).business.currency;
 }

@@ -841,7 +841,9 @@ linked from every manifest; in plain steps, for any customer's agent:
 1. **Say who you carry:** present the person's pass in `pass` or `Sdi-Pass`, never in a URL. Given a
    key, exchange it once for a pass (at the network or in the `key` field) and keep the pass.
 2. **First booking:** keep the pass from `identity.passes`; tell the person their key comes by email.
-3. **Identify the human, not yourself:** `contact.name`, `email`, `phone`, `locale` are the person's.
+3. **Identify the human, not yourself:** `contact.name`, `email`, `phone`, `locale` are the person's; a name and
+   an email or a phone are required (amended by [ADR-048](048-client-details-and-real-orders.md), 15 November
+   2026).
 4. **Same customer next time:** present the pass; if the answer is `weak`, ask for the emailed code
    and call `verify_customer`.
 5. **Acknowledge receipts** with a token (the SDK's `signAck`), and report a broken promise, signed,

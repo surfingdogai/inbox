@@ -85,6 +85,8 @@ async function setUp(opts: { phone?: boolean } = {}) {
     doc: {
       business: { name: "Oficina Maré" },
       email: { fromAddress: "hello@oficinamare.example", inboundAddress: INBOUND },
+      // It lists nothing yet, and takes requests for a price in their own words (ADR-048).
+      doors: { quoteRequest: true },
     },
   });
   await db.orm.insert(schema.rules).values({

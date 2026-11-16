@@ -6,8 +6,9 @@ under `agent_policy.guide`.
 
 Businesses recognise people through **networks**. A network knows a person by a key they hold, and
 knows how reliably they keep their bookings and orders; a business sees that record only when you
-present it. The person never needs an account, and nothing here is required: an agent that does
-none of it is served exactly as before, as a new customer.
+present it. The person never needs an account. Passes and keys are never required: an agent that uses none of
+them is served as a new customer. The person's details are required: every new request carries their name, and an
+email or a phone (step 1).
 
 **The strings you may be given.** All of them are the person's, and all but the reference are secrets.
 
@@ -19,14 +20,19 @@ none of it is served exactly as before, as a new customer.
 
 ## 1. Identify the human, not yourself
 
-Put the person's details in `contact`, never your own:
+Every new booking, order, request for a price, message or stay carries the person's details in
+`contact`, never your own: their name, and an email or a phone (at least one), with `locale` if they say.
 
 ```json
 "contact": { "name": "Rita Silva", "email": "rita@example.com", "phone": "+351 912 345 678", "locale": "pt" }
 ```
 
-The business writes to that address, and a network gives the person a key through it. Use the
-person's real address; an address you made up reaches nobody, and the business may contact them.
+Ask your person first, and send only what they agree to give the business. Never make them up: an
+address you made up reaches nobody, and a request without a name and a way to reach them is refused,
+with nothing written (`422`, `details.reason` `"client_details"`, naming what is missing). So is a
+placeholder for one (`N/A`, `Test`, `{{name}}`, an address at `.invalid` or a no-reply one, `000000`), and
+a phone with letters in it (no extension). The business writes to that address or calls that number, and a
+network gives the person a key through the address.
 
 ## 2. Present the pass, in a field or a header, never in a URL
 

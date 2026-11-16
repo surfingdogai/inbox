@@ -244,9 +244,7 @@ describe("an order change the owner's AI drafted, with menu choices and a half",
         orderedItem: [
           {
             productId: s.product,
-            name: "Pizza",
             quantity: 1,
-            price: MXN(1),
             options: [
               { groupId: "size", choiceId: "grande" },
               { groupId: "masa", choiceId: "gruesa" },
@@ -254,7 +252,6 @@ describe("an order change the owner's AI drafted, with menu choices and a half",
             ],
           },
         ],
-        totalPrice: MXN(1),
         fulfil: { method: "pickup", slot: { start: slot } },
       },
       contact: { name: "A customer", email: "c1@example.com" },

@@ -78,6 +78,50 @@ export const contactSchema = z.object({
 });
 export type Contact = z.infer<typeof contactSchema>;
 
+/**
+ * Who a new request is from, as the doors read it (ADR-048): listed with `name` required, and read as sent,
+ * trimmed: a request without a detail, or with one that is not what it says, is answered by the client rule
+ * (`requireClient`) in its own words on every door, never by the schema. Its JSON Schema still says what each
+ * detail is (a format, a length). No `anyOf`: at least one of email and phone is said in words.
+ */
+export const clientContactSchema = z
+  .object({
+    name: z.string().trim().optional().meta({
+      minLength: 1,
+      maxLength: 200,
+      description:
+        "Their name, as they want the business to use it: with a letter in it and no @. Never a placeholder (N/A, Test, {{name}}).",
+    }),
+    email: z.string().trim().optional().meta({
+      format: "email",
+      maxLength: 254,
+      description: "An email address the business can answer them at: one that receives mail, not a no-reply one.",
+    }),
+    phone: z.string().trim().optional().meta({
+      maxLength: 40,
+      description:
+        "A phone number the business can reach them on, with its country code: +351 912 345 678. 6 to 20 digits, no letters (no extension), and only spaces, +, -, (, ), . or / between them.",
+    }),
+    locale: z.string().max(12).optional().describe("The language they want answers in: en, pt."),
+  })
+  .meta({
+    required: ["name"],
+    description:
+      "Your person's details, as they agreed to give them to this business: their name, and an email address or a phone number (at least one of the two). Ask them first; never make them up, and never send your own.",
+  });
+
+/**
+ * `schema`, its JSON Schema (the MCP tool list, /openapi.json) listing `keys` as required beside the fields it
+ * requires itself, while a request that leaves one out is still read. Call it on the finished object:
+ * `.extend()` and `.omit()` make a new schema without it.
+ */
+export function listedRequired<S extends z.ZodObject>(schema: S, keys: readonly string[]): S {
+  const required = Object.entries(schema.shape)
+    .filter(([key, field]) => keys.includes(key) || (field as z.ZodType)._zod.optin !== "optional")
+    .map(([key]) => key);
+  return schema.meta({ required });
+}
+
 export const postalAddressSchema = z.object({
   streetAddress: z.string().max(200).optional(),
   addressLocality: z.string().max(100).optional(),
@@ -431,6 +475,32 @@ export const orderPayloadSchema = z.object({
   offer: offerPointerSchema.optional(),
 });
 
+/** An order line as a customer's request sends it (ADR-048): the catalogue gives its name and its price. */
+export const orderRequestLineSchema = orderLineSchema.extend({
+  productId: z
+    .string()
+    .optional()
+    .describe("One of the business's products, by its id from list_products. Each line names one (or its sku)."),
+  sku: z.string().max(100).optional().describe("Or the product's sku, from list_products."),
+  name: z.string().min(1).max(200).optional().describe("Left out, it is the product's own."),
+  price: moneySchema
+    .optional()
+    .describe(
+      "Leave it out: the business prices the line. One you send must be the business's price from list_products, in its currency.",
+    ),
+});
+
+/** An order as a customer's request sends it: its lines' names and prices, and its total, may be left to the catalogue. */
+export const orderRequestPayloadSchema = orderPayloadSchema.extend({
+  orderedItem: z.array(orderRequestLineSchema).min(1).max(200),
+  totalPrice: moneySchema
+    .optional()
+    .describe(
+      "Leave it out: the business works out the total, with any delivery fee or tip. One you send must be the business's total, in its currency.",
+    ),
+});
+export type OrderRequestPayload = z.infer<typeof orderRequestPayloadSchema>;
+
 /**
  * What the law lets a product or service be excepted from withdrawal (ADR-018 §7; CRD art. 16, PT
  * DL 24/2014 art. 17): `standard` when the right runs. Read narrowly: preset options are not
@@ -643,6 +713,15 @@ export const payloadSchemas = {
 } as const satisfies Record<ItemType, z.ZodType>;
 
 export type PayloadOf<T extends ItemType> = z.infer<(typeof payloadSchemas)[T]>;
+
+/**
+ * The schema a create is first read with (ADR-048): an order may leave its lines' names and prices, and its total,
+ * to the catalogue (`orderRequestPayloadSchema`), whoever writes it; what is stored is read again with
+ * `payloadSchemas`, so it always has them.
+ */
+export function requestSchemaOf(type: ItemType): z.ZodType {
+  return type === "order" ? orderRequestPayloadSchema : payloadSchemas[type];
+}
 
 // ---- the item envelope ----------------------------------------------------
 

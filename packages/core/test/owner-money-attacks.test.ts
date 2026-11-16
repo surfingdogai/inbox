@@ -106,7 +106,9 @@ const later = { startTime: "2026-09-23T10:00:00Z", endTime: "2026-09-23T11:00:00
 describe("the owner's AI proposing a time", () => {
   it("does not offer the customer's own price back by leaving the price out", async () => {
     const s = await setup();
-    // "From €20": the customer wrote €1. No rule and no AI may confirm that (business_priced)…
+    // "From €20": the customer wrote €1, as their offer where the business takes one (ADR-048). No rule and no AI
+    // may confirm that (business_priced)…
+    await s.caps.updateSettings(person, { doc: { negotiation: { priceCounters: true } } });
     const b = await s.book(s.svc.from, 9, { totalPrice: EUR(100) });
     // …and a time proposed with no price would carry the €1 to the customer's yes: a draft for the owner.
     for (const caller of [ai, mcp]) {

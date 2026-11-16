@@ -1,6 +1,6 @@
 import { bedTypeSchema, extraItemSchema, lodgingKindSchema, mealSchema, stayQuoteSchema } from "@surfingdog/spec";
 import { z } from "zod";
-import { contactSchema, moneySchema } from "../domain/types";
+import { clientContactSchema, listedRequired, moneySchema } from "../domain/types";
 
 /**
  * The inputs of the stays doors (ADR-037 §6): the guest's assistant's tools, and the owner's. Every
@@ -64,7 +64,12 @@ export const quoteStayInput = z.object({
     .describe("An offer you were given before: the answer says if its totals changed."),
 });
 
-export const requestStayInput = z.object({
+/**
+ * A request for a stay as the guest's assistant sends it. `contact` is listed as required and read as sent:
+ * a request without the guest's name and a way to reach them is refused by the client rule (ADR-048), in its
+ * own words, on every door.
+ */
+const requestStayBase = z.object({
   property_id: id.optional(),
   ...dates,
   rooms: z.array(guestRoom).min(1).max(9),
@@ -79,16 +84,21 @@ export const requestStayInput = z.object({
     .optional(),
   arrival: z.object({ from: hhmm, to: hhmm }).optional().describe("When the guests expect to arrive."),
   requests: z.string().max(2_000).optional().describe("Special requests, in the guest's words."),
-  contact: contactSchema.describe("How the property reaches the guest."),
+  contact: clientContactSchema.optional(),
   consent: z.literal(true).describe("The guest agreed that their request, with these details, goes to the property."),
   message: z.string().max(20_000).optional(),
   idempotency_key: idempotencyKey,
   ...carried,
 });
 
-export const holdStayInput = requestStayInput.extend({
-  offer_id: z.string().max(120).optional().describe("The offer from check_stay_availability or quote_stay."),
-});
+export const requestStayInput = listedRequired(requestStayBase, ["contact"]);
+
+export const holdStayInput = listedRequired(
+  requestStayBase.extend({
+    offer_id: z.string().max(120).optional().describe("The offer from check_stay_availability or quote_stay."),
+  }),
+  ["contact"],
+);
 
 export const bookStayInput = z.object({
   item_id: z.string().min(1).describe("The held stay, from hold_stay."),

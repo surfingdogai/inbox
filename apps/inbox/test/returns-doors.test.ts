@@ -65,10 +65,8 @@ const json = async (r: Response) => (await r.json()) as Json;
 /** An order for three chains, confirmed at the confirm step, accepted, paid and delivered. */
 async function delivered(s: Awaited<ReturnType<typeof setup>>) {
   const order = {
-    payload: {
-      orderedItem: [{ sku: "CH-9", name: "Chain", quantity: 3, price: { value: 1, currency: "EUR" } }],
-      totalPrice: { value: 3, currency: "EUR" },
-    },
+    // What the business sells, and how many: it names and prices the line (ADR-048).
+    payload: { orderedItem: [{ sku: "CH-9", quantity: 3 }] },
     contact: { name: "Rita", email: "rita@example.com", locale: "en" },
     idempotency_key: "order-1",
   };
@@ -172,13 +170,20 @@ describe("returns through the REST doors", () => {
     const twice = await s.call("POST", `/v1/items/${o.id}/returns`, { access_token: o.token, reason: "faulty" });
     expect(twice.status).toBe(409);
 
-    const other = await s.call("POST", "/v1/orders", {
-      payload: {
-        orderedItem: [{ name: "Custom frame", quantity: 1, price: { value: 900, currency: "EUR" } }],
-        totalPrice: { value: 900, currency: "EUR" },
+    // An order the business wrote down itself, as it took it on the phone: a line of its own to price.
+    const other = await s.call(
+      "POST",
+      "/v1/orders",
+      {
+        payload: {
+          orderedItem: [{ name: "Custom frame", quantity: 1, price: { value: 900, currency: "EUR" } }],
+          totalPrice: { value: 900, currency: "EUR" },
+        },
+        contact: { email: "ana@example.com" },
       },
-      contact: { email: "ana@example.com" },
-    });
+      s.owner,
+    );
+    expect(other.status, await other.clone().text()).toBe(201);
     const otherId = ((await other.json()) as { view: { item: { id: string } } }).view.item.id;
     for (const event of ["accept", "fulfil"]) {
       await s.call("POST", `/v1/owner/items/${otherId}/transitions`, { event }, s.owner);
@@ -199,12 +204,16 @@ describe("returns through the REST doors", () => {
 
   it("refuse a withdrawal from what is not agreed yet, and ask a return only of goods that were sent", async () => {
     const s = await setup();
-    const made = await s.call("POST", "/v1/orders", {
-      payload: {
-        orderedItem: [{ name: "Custom frame", quantity: 1, price: { value: 900, currency: "EUR" } }],
-        totalPrice: { value: 900, currency: "EUR" },
-      },
-    });
+    // Asked for, and confirmed by its person: not taken by the business yet.
+    const order = {
+      payload: { orderedItem: [{ sku: "CH-9", quantity: 1 }] },
+      contact: { name: "Ana", phone: "+1 555 010 0199" },
+    };
+    const asked = await s.call("POST", "/v1/orders", order);
+    expect(asked.status).toBe(409);
+    const sha = ((await json(asked)).details as { terms_sha: string }).terms_sha;
+    const made = await s.call("POST", "/v1/orders", { ...order, terms_sha: sha });
+    expect(made.status, await made.clone().text()).toBe(201);
     const { view, accessToken } = (await made.json()) as { view: { item: { id: string } }; accessToken: string };
     const w = await s.call("POST", `/v1/items/${view.item.id}/withdraw`, {
       access_token: accessToken,
@@ -225,11 +234,8 @@ describe("returns through MCP", () => {
     const s = await setup();
     const client = await s.mcp("/mcp");
     const order = {
-      payload: {
-        orderedItem: [{ sku: "CH-9", name: "Chain", quantity: 1, price: { value: 1, currency: "EUR" } }],
-        totalPrice: { value: 1, currency: "EUR" },
-      },
-      contact: { email: "rita@example.com" },
+      payload: { orderedItem: [{ sku: "CH-9", quantity: 1 }] },
+      contact: { name: "Rita", email: "rita@example.com" },
     };
     const asked = (await client.callTool({ name: "create_order", arguments: order })) as {
       isError?: boolean;

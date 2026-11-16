@@ -112,6 +112,10 @@ does not change:
 - **The business itself** (the owner, its AI, an integration key, a connector) writes down any time.
 - **A retry** of a request that was taken is answered as it was, whatever the time is now.
 
+> Extended by [ADR-048](048-client-details-and-real-orders.md) (15 November 2026) from times to kinds: an
+> assistant's request of a kind the business does not take here is refused as a time it does not offer is,
+> naming what it takes (`<kind>_not_offered`, `details.item_types`).
+
 This is ADR-018's rule for a customer's counter ("a free time the business would offer") applied to
 the first request. The rules' `slot_is_free` and `within_business_hours` still matter for what the
 business writes down itself. There was no setting that takes customers' requests at any time, so

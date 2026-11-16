@@ -1,7 +1,7 @@
 import { parseMajor } from "./actions";
 import { minorUnitsOf } from "./currencies";
 import { type BusinessKind, businessKind, type ChosenKind, type KindPreset } from "./kinds";
-import type { ConnectorGroup, PresetKey, ProductBody, ServiceBody, Settings } from "./types";
+import type { ConnectorGroup, PresetKey, ProductBody, ProductRow, ServiceBody, Settings } from "./types";
 
 /**
  * What the setup wizard's "What you offer" step sends, as pure functions so they run in tests on
@@ -327,6 +327,25 @@ export const DOOR_GROUPS: readonly { readonly id: DoorGroup; readonly label: str
   { id: "talk", label: "Messages" },
 ];
 
+/**
+ * How many of the business's products an order can name, as the inbox opens orders (ADR-048): on sale, not past
+ * their last moment to order, at a fixed price in the business's own currency. A product priced on request, from
+ * or as a range is asked about, never ordered, and opens no ordering.
+ */
+export function orderable(
+  items: readonly Pick<ProductRow, "active" | "price" | "priceModel" | "availableUntil">[],
+  currency: string | undefined,
+  now: number = Date.now(),
+): number {
+  return items.filter(
+    (p) =>
+      p.active !== 0 &&
+      (p.priceModel ?? "fixed") === "fixed" &&
+      !(typeof p.availableUntil === "number" && p.availableUntil <= now) &&
+      (!currency || p.price.currency.toUpperCase() === currency.toUpperCase()),
+  ).length;
+}
+
 /** One switch on "What can agents do?", with the line under it: what it means for the owner. */
 export interface DoorChoice {
   readonly key: keyof WizardDoors;
@@ -349,8 +368,8 @@ const QUOTE_LINES: Readonly<Record<string, string>> = {
  * Every door the inbox has, as the wizard shows a kind: a place to stay asks for stays, a restaurant books tables, a
  * kitchen takes orders for a time, everyone else books time and sells products; each can be asked for a price,
  * negotiate, change what was agreed and write. Each line says what it means for the owner. Ordering products has no
- * switch in Settings: it opens with the first product listed, so with some listed (`listed`) it is said, not
- * switched, and without, the switch only says whether the business sells any.
+ * switch in Settings: it opens with the first product an order can name (`orderable`: at a fixed price), so with
+ * some (`listed`) it is said, not switched, and without, the switch only says whether the business sells any.
  */
 export function doorRows(kind: SetupKind | undefined, listed = 0): readonly DoorChoice[] {
   const key = kind?.key ?? "";
@@ -386,7 +405,7 @@ export function doorRows(kind: SetupKind | undefined, listed = 0): readonly Door
       key: "products",
       group: "buy",
       label: "Agents can order your products",
-      line: `${listed} listed, at your prices and stock. Ordering stays open while you list one: Settings → Products.`,
+      line: `${listed} at a fixed price, at your prices and stock. Ordering stays open while one is on sale at a fixed price: Settings → Products.`,
       fixed: true,
     });
   } else if (!stays) {
@@ -394,7 +413,7 @@ export function doorRows(kind: SetupKind | undefined, listed = 0): readonly Door
       key: "products",
       group: "buy",
       label: "You sell products",
-      line: "Agents can order what you list, at your prices and stock. Ordering opens with your first product; on, the next step asks for a few or brings them from your shop.",
+      line: "Agents can order what you sell at a fixed price, at your prices and stock; one priced on request they ask you about. Ordering opens with your first product at a fixed price; on, the next step asks for a few or brings them from your shop.",
     });
   }
   rows.push({

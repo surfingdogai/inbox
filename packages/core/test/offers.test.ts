@@ -22,7 +22,7 @@ import {
   threadEntries,
 } from "../src/schema/tables";
 import { createSecretBox } from "../src/secrets/box";
-import { type Caller, rowToItem, transitionItem, WriteError } from "../src/write/index";
+import { type Caller, createItem, rowToItem, transitionItem, WriteError } from "../src/write/index";
 import { confirming, makeClient, openWeekdays, resetTables } from "./harness";
 
 /**
@@ -190,14 +190,12 @@ describe("the customer's request is the first offer", () => {
     const s = await setup();
     const soon = await booking(s, 5 * HOUR);
     expect((await offerRows(s.db, soon.id))[0]?.validThrough).toBe(T0 + 5 * HOUR);
-    const o = await s.caps.createOrder(anon(), {
-      payload: { orderedItem: [{ sku: "CH-9", name: "Chain", quantity: 2, price: EUR(1) }], totalPrice: EUR(2) },
-    });
+    const o = await s.caps.createOrder(anon(), { payload: { orderedItem: [{ sku: "CH-9", quantity: 2 }] } });
     const [or] = await offerRows(s.db, o.view.item.id);
     expect(or).toMatchObject({
       form: "order",
       by: "customer",
-      // The business's price, never the one the request stated.
+      // The business's price, and its name, for a line that left them out (ADR-048).
       terms: { lines: [{ sku: "CH-9", name: "Chain", quantity: 2, price: EUR(1850) }], totalPrice: EUR(3700) },
       validThrough: T0 + 72 * HOUR,
     });
@@ -415,8 +413,13 @@ describe("a time we propose", () => {
 });
 
 describe("changes to an order", () => {
+  /**
+   * A customer's order with a line of the business's to price (the fitting): an assistant names only what the
+   * business sells (ADR-048), so it is written as the business's own records hold such an order.
+   */
   async function ordered(s: Setup) {
-    const r = await s.caps.createOrder(anon(), {
+    const r = await createItem(s.db, anon(), {
+      type: "order",
       payload: {
         orderedItem: [
           { sku: "CH-9", name: "Chain", quantity: 3, price: EUR(1850) },

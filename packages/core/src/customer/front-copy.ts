@@ -43,6 +43,8 @@ export interface FrontCopy {
   readonly fields: { readonly name: string; readonly email: string; readonly note: string };
   readonly send: string;
   readonly missing: string;
+  /** A name filled in that is none: no letter in it, or an email address. */
+  readonly badName: string;
   readonly badEmail: string;
   readonly sent: {
     readonly heading: string;
@@ -108,6 +110,7 @@ const EN: FrontCopy = {
   fields: { name: "Your name", email: "Your email", note: "Anything we should know? (optional)" },
   send: "Send",
   missing: "Please fill in your name, your email and the rest of the form.",
+  badName: "Please write your name in letters, as you'd like us to call you. Your email goes in the next box.",
   badEmail: "That email address doesn't look right.",
   sent: {
     heading: "Thank you",
@@ -166,6 +169,7 @@ const PT: FrontCopy = {
   fields: { name: "O seu nome", email: "O seu e-mail", note: "Algo que devamos saber? (opcional)" },
   send: "Enviar",
   missing: "Preencha o seu nome, o seu e-mail e o resto do formulário, por favor.",
+  badName: "Escreva o seu nome em letras, como quer que o tratemos, por favor. O e-mail vai na caixa seguinte.",
   badEmail: "Esse endereço de e-mail não parece estar certo.",
   sent: {
     heading: "Obrigado",

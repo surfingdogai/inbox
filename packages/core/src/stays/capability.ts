@@ -3,12 +3,13 @@ import { fillStayTemplate } from "@surfingdog/spec";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import type { AccessCapabilities } from "../access/keys";
+import { notOffered, publishedItemTypes } from "../capabilities/directory";
 import type { CarriedInput, IdentityCapabilities } from "../capabilities/identity";
 import type { ConnectorCapabilities } from "../connectors/capability";
 import { payCollection } from "../connectors/pay-queue";
 import { isPropertySystem } from "../connectors/sdk";
 import type { Db } from "../db";
-import { type Item, type PayloadOf, payloadSchemas } from "../domain/types";
+import { type Contact, type Item, type PayloadOf, payloadSchemas } from "../domain/types";
 import { ariStatements } from "../property/ari";
 import { hintedNights, mapCalendar } from "../property/hints";
 import { syncAri } from "../property/sync";
@@ -17,6 +18,8 @@ import type { SecretBox } from "../secrets/box";
 import { readSettings, type Settings } from "../settings/schema";
 import { addDays, dateIn, knownZone } from "../util/zoned";
 import { type Caller, isCustomer, nowOf, withIdempotencyKey } from "../write/caller";
+import { clientRequired, requireClient } from "../write/client";
+import { findIdempotent } from "../write/common";
 import type { CreateInput, CreateResult } from "../write/create";
 import { fromZod, WriteError } from "../write/errors";
 import { type TransitionResult, transitionItem } from "../write/transition";
@@ -169,19 +172,44 @@ export class StayCapabilities {
     if (!isCustomer(caller)) return;
     const there = await this.elsewhere(settings, q);
     if (there) {
-      throw new WriteError("not_allowed", `This property takes stays on its own booking page: ${there}`, {
-        details: { reason: "elsewhere", url: there },
-      });
+      // In the business's voice, as every door's refusal (ADR-048).
+      throw new WriteError(
+        "not_allowed",
+        `We take stays on our own booking page, not here: ${there}. Send your person there. Nothing was written.`,
+        { details: { reason: "elsewhere", url: there } },
+      );
     }
     if (caller.actor.kind === "customer_agent" && settings.doors.stay === false) {
       throw new WriteError(
         "not_allowed",
-        "This property does not take stays through assistants. Send a message instead.",
-        {
-          details: { reason: "door_shut", type: "stay" },
-        },
+        "We take no stays from assistants here: send us a message instead. Nothing was written.",
+        { details: { reason: "door_shut", type: "stay" } },
       );
     }
+  }
+
+  /**
+   * An assistant's stay where the business takes none here (ADR-048): no room offered, or stays switched off or
+   * taken elsewhere. Refused, naming what it does take, before anything is asked of the property's system.
+   */
+  private async refuseStayNotOffered(caller: Caller): Promise<void> {
+    if (!clientRequired(caller)) return;
+    const offered = await publishedItemTypes(this.db, nowOf(caller));
+    if (!offered.includes("stay")) throw notOffered("stay", offered, caller);
+  }
+
+  /**
+   * What every new stay of an assistant's meets once the doors are open (ADR-048): a kind the business takes,
+   * for a guest it can answer. A retry of a request already written is answered as it was.
+   */
+  private async refuseNewStay(
+    caller: Caller,
+    input: { readonly idempotency_key?: string | undefined; readonly contact?: Contact | undefined },
+  ): Promise<void> {
+    const c = withIdempotencyKey(caller, input.idempotency_key);
+    if (c.idempotency && (await findIdempotent(this.db, c.idempotency))) return;
+    await this.refuseStayNotOffered(c);
+    requireClient(c, input.contact, "stay");
   }
 
   async property(caller: Caller, raw: unknown): Promise<PropertyPublic> {
@@ -340,6 +368,8 @@ export class StayCapabilities {
 
   /** A request for a stay: the property answers it with its own quote (`request_stay`). */
   async request(caller: Caller, raw: unknown): Promise<CreateResult & { readonly words: string }> {
+    // A key of the business's makes a stay only while it may write items (ADR-048), as on every other door.
+    await this.deps.access.requireScope(caller, ["inbox:write"], "public:request_stay");
     const input = parse(I.requestStayInput, raw);
     const settings = await readSettings(this.db);
     const setup = await this.setupFor(input.property_id);
@@ -352,6 +382,7 @@ export class StayCapabilities {
       children,
       rooms: input.rooms.length,
     });
+    await this.refuseNewStay(caller, input);
     const lang = await this.langOf(caller, settings);
     const now = nowOf(caller);
     // The estimate the property's rates give, for the owner's draft and the guest's page: never binding.
@@ -422,6 +453,7 @@ export class StayCapabilities {
       readonly words: string;
     }
   > {
+    await this.deps.access.requireScope(caller, ["inbox:write"], "public:hold_stay");
     const input = parse(I.holdStayInput, raw);
     const settings = await readSettings(this.db);
     const setup = await this.setupFor(input.property_id);
@@ -435,9 +467,10 @@ export class StayCapabilities {
       children,
       rooms: input.rooms.length,
     });
+    await this.refuseNewStay(caller, input);
     this.checkDates(setup, input.check_in, input.check_out, now);
     const rooms = this.roomsOf(setup, input.rooms, caller);
-    const email = input.contact.email;
+    const email = input.contact?.email;
     await this.limitHolds(caller, email);
     // In connected mode the property's system is asked now, live: a hold is never made on a cache alone.
     // A system that does not answer leaves the stay on request.

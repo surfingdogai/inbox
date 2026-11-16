@@ -63,6 +63,8 @@ async function setup(opts: { shop?: FakeShopify; currency?: string } = {}) {
         email: { fromAddress: "pedidos@xochitl.example.mx" },
         notifications: { ownerEmail: "guadalupe@xochitl.example.mx", appUrl: BASE },
         directory: { url: STOREFRONT },
+        // It takes requests for a price in their own words, whatever the shop lists (ADR-048).
+        doors: { quoteRequest: true },
       },
     },
     owner,

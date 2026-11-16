@@ -70,7 +70,9 @@ async function setup(opts: FakeSquareOptions & { taxRate?: number } = {}) {
     {
       doc: {
         business: osaka
-          ? { name: "Osaka Kitchenware", currency: "USD", timezone: "UTC", languages: ["ja", "en"] }
+          ? // A shop in Osaka prices in yen, as its Square catalogue does: an assistant orders in the business's own
+            // currency (ADR-048).
+            { name: "Osaka Kitchenware", currency: "JPY", timezone: "UTC", languages: ["ja", "en"] }
           : { name: "Salon Lumière", currency: "CAD", timezone: "UTC", languages: ["fr", "en"] },
         email: { fromAddress: "bonjour@lumiere.example.ca" },
         notifications: { ownerEmail: "amelie@lumiere.example.ca", appUrl: BASE },

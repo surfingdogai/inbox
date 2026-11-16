@@ -15,7 +15,7 @@ import {
 import type { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
 import { z } from "zod";
-import { problemFrom } from "./problem";
+import { problemFrom, problemText } from "./problem";
 import type { CallerEnv } from "./rest";
 import { validator } from "./validate";
 
@@ -32,12 +32,7 @@ const ok = (text: string, structured: unknown): CallToolResult => ({
 
 const failed = (error: unknown): CallToolResult => {
   const p = problemFrom(error);
-  const fields = p.fields?.length ? ` Fix: ${p.fields.map((f) => `${f.path} (${f.problem})`).join(", ")}.` : "";
-  return {
-    content: [{ type: "text", text: `${p.title}: ${p.detail}${fields}` }],
-    structuredContent: { error: p },
-    isError: true,
-  };
+  return { content: [{ type: "text", text: problemText(p) }], structuredContent: { error: p }, isError: true };
 };
 
 const nowOf = (caller: Caller) => (caller.now ? caller.now() : Date.now());
@@ -61,16 +56,31 @@ export const FOOD_INSTRUCTIONS = [
 /**
  * What an agent is told of the menu doors. A business that takes its orders on its own site
  * (`settings.doorsElsewhere`, ADR-035) still shows its menu here, and the agent is sent there to order:
- * never told of slots or an order create_order would refuse.
+ * never told of slots or an order create_order would refuse. One that takes no orders here at all
+ * (`orders: false`, ADR-048: nothing on sale at a fixed price) shows its menu and says nothing of ordering.
  */
-export function foodInstructions(ordersAt: string | null): string {
-  if (!ordersAt) return FOOD_INSTRUCTIONS;
-  return [
-    MENU_WORDS,
-    `${ALLERGEN_WORDS}.`,
-    `This business takes orders at ${ordersAt}, not here: send your person there to order.`,
-    TABLE_WORDS,
-  ].join(" ");
+export function foodInstructions(
+  ordersAt: string | null,
+  o: { readonly orders?: boolean; readonly bookings?: boolean } = {},
+): string {
+  // Tables are spoken of only where bookings are taken here (ADR-048): never a tool that is not listed.
+  const tables = o.bookings === false ? [] : [TABLE_WORDS];
+  if (ordersAt) {
+    return [
+      MENU_WORDS,
+      `${ALLERGEN_WORDS}.`,
+      `This business takes orders at ${ordersAt}, not here: send your person there to order.`,
+      ...tables,
+    ].join(" ");
+  }
+  if (o.orders === false) return [MENU_WORDS, `${ALLERGEN_WORDS}.`, ...tables].join(" ");
+  return o.bookings === false
+    ? [
+        MENU_WORDS,
+        `${ALLERGEN_WORDS}; an order with such a dish waits for a person at the business.`,
+        ORDER_WORDS,
+      ].join(" ")
+    : FOOD_INSTRUCTIONS;
 }
 
 const sectionsText = (r: Awaited<ReturnType<Capabilities["food"]["getMenu"]>>) =>
@@ -84,7 +94,7 @@ export function registerPublicFoodTools(
   server: McpServer,
   caps: Capabilities,
   caller: Caller,
-  opts: { readonly ordersAt?: string | null } = {},
+  opts: { readonly ordersAt?: string | null; readonly orders?: boolean } = {},
 ): void {
   server.registerTool(
     "get_menu",
@@ -104,8 +114,9 @@ export function registerPublicFoodTools(
       }
     },
   );
-  // Orders taken on the business's own site: no slot is offered here for one (foodInstructions).
-  if (opts.ordersAt) return;
+  // Orders taken on the business's own site, or none taken here (ADR-048): no slot is offered for one
+  // (foodInstructions).
+  if (opts.ordersAt || opts.orders === false) return;
   server.registerTool(
     "list_order_slots",
     {

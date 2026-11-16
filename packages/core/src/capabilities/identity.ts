@@ -4,7 +4,7 @@ import { copyFor, vars } from "../customer/copy";
 import { customerHtmlPart } from "../customer/html";
 import { type CustomerLang, customerLang } from "../customer/lang";
 import type { Db } from "../db";
-import { payloadSchemas } from "../domain/types";
+import { type PayloadOf, payloadSchemas, requestSchemaOf } from "../domain/types";
 import { collectCarried } from "../identity/carried";
 import { checkCode, createCode, type VerifyTarget } from "../identity/codes";
 import { emailOf, maskEmail, rootParty } from "../identity/contacts";
@@ -31,9 +31,12 @@ import type { SecretBox } from "../secrets/box";
 import { readSettings, type Settings } from "../settings/schema";
 import type { Door } from "../spam/types";
 import { type Caller, isCustomer, nowOf, type TrustTier } from "../write/caller";
+import { clientRequired, requireClient } from "../write/client";
 import { findIdempotent, threadEntryStatement } from "../write/common";
 import { ACKNOWLEDGED, type CreateInput, type CreateResult, type CreateScreener, createItem } from "../write/create";
 import { WriteError } from "../write/errors";
+import { checkBookingPrice, checkOrderLines, checkQuoteRequest } from "../write/pricing";
+import { askDoor, notOffered, publishedItemTypes } from "./directory";
 
 /**
  * People and customers at the doors (ADR-017 §2.1, §8.1–§8.4): the create that presents what the
@@ -94,9 +97,20 @@ export class IdentityCapabilities {
       const replayed = await createItem(this.db, caller, input, { spam: this.spam });
       return { ...replayed, identity: await this.answer(replayed.view.item.id, {}, retryAudience(caller, replayed)) };
     }
+    // Every new request of an assistant's carries its person's name and a way to reach them, is a kind the
+    // business takes and, an order or a booking, is priced by it (ADR-048): checked again here, after this
+    // create's own replay lookup, whichever door it came through. A door's early lookup may have found a row
+    // that is gone by now (the idempotency keys are pruned), and nothing is presented, asked or written
+    // without all of them.
+    requireClient(caller, input.contact, input.type, { test: input.flags?.sandbox === true });
+    if (clientRequired(caller)) await this.refuseAssistantRequest(caller, input, now);
     // Nothing is asked of a network for a request the create would refuse anyway, and nothing at
     // all for a test item: it emails nobody and contacts no network (the founder, 23 September 2026).
-    const valid = payloadSchemas[input.type]?.safeParse(input.payload).success === true && !hasStarted(input, now);
+    // A customer's order is read as its request may send it, its prices left to the catalogue.
+    const valid =
+      payloadSchemas[input.type] !== undefined &&
+      requestSchemaOf(input.type).safeParse(input.payload).success &&
+      !hasStarted(input, now);
     const test = caller.sandbox || input.flags?.sandbox === true;
     // A customer who asked the business not to use booking networks (the founder, 23 September 2026): no
     // network is asked anything about them, and a pass they carry is recognised here, from its hash.
@@ -169,6 +183,24 @@ export class IdentityCapabilities {
       ...result,
       identity: await this.answer(result.view.item.id, { presented, issued }, audienceOf(caller)),
     };
+  }
+
+  /**
+   * An assistant's new request as the business takes it (ADR-048), as each door checks it first: a kind it
+   * takes here (`publishedItemTypes`), what a request for a price names (`checkQuoteRequest`), an order's lines
+   * (`checkOrderLines`) and a booking's total (`checkBookingPrice`). Throws the refusal, in the door's words.
+   */
+  private async refuseAssistantRequest(caller: Caller, input: CreateInput, now: number): Promise<void> {
+    const kind = input.type;
+    if (kind !== "booking" && kind !== "quote_request" && kind !== "order" && kind !== "stay") return;
+    const offered = await publishedItemTypes(this.db, now);
+    if (!offered.includes(kind)) throw notOffered(kind, offered, caller);
+    if (kind === "quote_request") await checkQuoteRequest(this.db, input.payload);
+    if (kind !== "order" && kind !== "booking") return;
+    const counters = (await readSettings(this.db)).negotiation.priceCounters;
+    if (kind === "order") {
+      await checkOrderLines(this.db, input.payload, { pricing: input.pricing, now, counters, ask: askDoor(offered) });
+    } else await checkBookingPrice(this.db, input.payload as PayloadOf<"booking">, { counters });
   }
 
   /**

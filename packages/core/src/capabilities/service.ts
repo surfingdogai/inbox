@@ -151,6 +151,7 @@ import {
   permissionKind,
   withIdempotencyKey,
 } from "../write/caller";
+import { clientRequired, requireClient } from "../write/client";
 import { findIdempotent } from "../write/common";
 import { hiddenTransitions } from "../write/corrections";
 import type { CreateResult } from "../write/create";
@@ -167,6 +168,7 @@ import {
 import { type OnceOptions, type OnceResult, once } from "../write/idempotency";
 import { heldReplyStatements, namesOtherMoney } from "../write/limits";
 import { isAutomation } from "../write/offers";
+import { checkBookingPrice, checkOrderLines, checkQuoteRequest } from "../write/pricing";
 import { withdrawalOf } from "../write/returns";
 import { appendThreadEntry } from "../write/thread";
 import {
@@ -187,7 +189,15 @@ import {
 } from "./availability";
 import { CustomerDoors, type CustomerItemView } from "./customer";
 import { CustomerData } from "./customers";
-import { doorSwitch, offeredItemTypes } from "./directory";
+import {
+  askDoor,
+  doorShut,
+  doorSwitch,
+  notOffered,
+  offeredItemTypes,
+  publishedItemTypes,
+  takenHere,
+} from "./directory";
 import { checkDiscovery, type DiscoveryView, discoveryTarget, discoveryView } from "./discovery";
 import { EmailChannelCapabilities } from "./email";
 import { FeedCapabilities } from "./feeds";
@@ -865,13 +875,8 @@ export class Capabilities {
    * trusts it is never sent on to a door that refuses it too.
    */
   private async takenElsewhereError(kind: "booking" | "order", door: DoorElsewhere): Promise<WriteError> {
-    const s = await readSettings(this.db);
-    const here = await offeredItemTypes(
-      this.db,
-      s.doorsElsewhere.map((d) => d.itemType),
-      s.doors,
-    );
-    return takenElsewhere(kind, door, here);
+    // What still comes here, as the manifest and the profile publish it (ADR-048): one set for all three.
+    return takenElsewhere(kind, door, await publishedItemTypes(this.db));
   }
 
   /**
@@ -892,15 +897,42 @@ export class Capabilities {
    */
   private async refuseShut(caller: Caller, kind: "booking" | "quote_request" | "message"): Promise<void> {
     if (caller.actor.kind !== "customer_agent") return;
-    if (doorSwitch((await readSettings(this.db)).doors, kind) === false) throw doorShut(kind);
+    if (doorSwitch((await readSettings(this.db)).doors, kind) === false) {
+      throw doorShut(kind, await publishedItemTypes(this.db, nowOf(caller)), caller);
+    }
+  }
+
+  /**
+   * A key or an AI app of the business's on a door that makes something new (ADR-048): it writes a request
+   * down as the business only while it may write items (`inbox:write`), as on every follow-up door. A narrower
+   * key, a website's forms key or a read-only one, is refused outside its scopes before anything is read or
+   * kept; the forms key always, whatever the owner set. A customer, and the inbox itself, are not asked.
+   */
+  private async requireWriter(caller: Caller, operation: string): Promise<void> {
+    await this.access.requireScope(caller, ["inbox:write"], `public:${operation}`);
+  }
+
+  /**
+   * An assistant's request of a kind this business does not take here (ADR-048): the kinds its manifest and
+   * profile publish (`publishedItemTypes`) are the only ones an assistant may send, and the refusal names
+   * them. People writing by email or on the business's own page, and the business itself, are not asked.
+   */
+  private async refuseNotOffered(
+    caller: Caller,
+    kind: "booking" | "quote_request" | "order",
+  ): Promise<readonly ItemType[]> {
+    if (!clientRequired(caller)) return [];
+    const offered = await publishedItemTypes(this.db, nowOf(caller));
+    if (!offered.includes(kind)) throw notOffered(kind, offered, caller);
+    return offered;
   }
 
   /**
    * An agent's search for times or booking when agents are told no booking is taken here
-   * (`offeredItemTypes`): no service booked at a time with opening hours someone set, or the door
+   * (`publishedItemTypes`): no service booked at a time with opening hours someone set, or the door
    * switched off. The manifest says so; an agent that never read it is refused all the same, never
-   * offered or given a time nobody opened. A booking of a service asked about for a price is refused
-   * to every customer: they ask for a price instead.
+   * offered or given a time nobody opened, and told what the business does take (ADR-048). A booking
+   * of a service asked about for a price is refused to every customer: they ask for a price instead.
    */
   private async refuseUnbookable(
     caller: Caller | undefined,
@@ -919,13 +951,9 @@ export class Capabilities {
     }
     if (caller.actor.kind !== "customer_agent") return;
     const s = await readSettings(this.db);
-    if (doorSwitch(s.doors, "booking") === false) throw doorShut("booking");
-    const offered = await offeredItemTypes(
-      this.db,
-      s.doorsElsewhere.map((d) => d.itemType),
-      s.doors,
-    );
-    if (!offered.includes("booking")) throw notBookableHere();
+    const offered = await publishedItemTypes(this.db, nowOf(caller));
+    if (doorSwitch(s.doors, "booking") === false) throw doorShut("booking", offered, caller);
+    if (!offered.includes("booking")) throw notOffered("booking", offered, caller);
   }
 
   /** The business's time zone: its profile's, else its settings'. */
@@ -1301,8 +1329,18 @@ export class Capabilities {
   }
 
   async requestQuote(caller: Caller, input: T.RequestQuoteInput, opts: DoorFacts = {}): Promise<CreateResult> {
+    await this.requireWriter(caller, "request_quote");
     await this.refuseShut(caller, "quote_request");
     const c = withIdempotencyKey(caller, input.idempotency_key);
+    // A kind the business takes, from a person the business can answer (ADR-048): asked before any file is
+    // kept. A retry of a request already written is answered as it was.
+    const replay = c.idempotency ? await findIdempotent(this.db, c.idempotency) : null;
+    if (!replay) {
+      await this.refuseNotOffered(c, "quote_request");
+      requireClient(c, input.contact, "quote_request");
+      // About something the business has, or in the person's own words; a budget in its currency.
+      if (clientRequired(c)) await checkQuoteRequest(this.db, input.payload);
+    }
     // The site against the area, an emergency against its door, the files checked and kept (ADR-039).
     const inboxAdds = await this.trades.prepareRequest(c, input.payload, input.attachments);
     return this.people.create(
@@ -1325,22 +1363,36 @@ export class Capabilities {
    * §2.1). The answer's `identity` says who the inbox takes the customer for.
    */
   async createBooking(caller: Caller, request: T.CreateBookingRequest, opts: DoorFacts = {}): Promise<CreateResult> {
+    await this.requireWriter(caller, "create_booking");
     await this.refuseElsewhere(caller, "booking");
     await this.refuseShut(caller, "booking");
     await this.refuseUnbookable(caller, request.payload?.reservationFor?.serviceId, { booking: true });
+    const c = withIdempotencyKey(caller, request.idempotency_key);
+    const replay = c.idempotency ? await findIdempotent(this.db, c.idempotency) : null;
+    // From a person the business can answer (ADR-048), before a summary is shown or a file kept; a table
+    // too big to book and a site visit are asked the same. A retry is answered as it was.
+    if (!replay) requireClient(c, request.contact, "booking");
     // An end or a service's name the request left out follows from the service.
     const input = await this.completeBooking(request);
-    const c = withIdempotencyKey(caller, input.idempotency_key);
     // A table (ADR-040): a party above the size the business books online becomes a request for a price;
     // one it books carries its deposit and policy, which the customer confirms with it.
-    const replay = c.idempotency ? await findIdempotent(this.db, c.idempotency) : null;
     const table = replay
       ? null
       : await this.food.planTable(c, input.payload, input.contact?.locale ?? caller.locale ?? "en");
-    if (table?.kind === "quote") return this.tableQuote(c, input, table.words, opts);
+    if (table?.kind === "quote") {
+      // It becomes a request for a price: one the business takes here (ADR-048).
+      await this.refuseNotOffered(c, "quote_request");
+      return this.tableQuote(c, input, table.words, opts);
+    }
     // A customer books a time the business offers (ADR-044 §2): any other is refused here, naming the
     // nearest free ones, before a summary is shown or anything lands on the owner. A retry is the same
     // request as before, and is answered as it was.
+    // An assistant's total is ours to give, in our currency (ADR-048): refused before a summary is shown.
+    if (!replay && clientRequired(c)) {
+      await checkBookingPrice(this.db, input.payload, {
+        counters: (await readSettings(this.db)).negotiation.priceCounters,
+      });
+    }
     if (!replay && isCustomer(c)) {
       await refuseTimeNotOffered(this.db, {
         serviceId: input.payload.reservationFor.serviceId,
@@ -1448,14 +1500,29 @@ export class Capabilities {
   }
 
   async createOrder(caller: Caller, input: T.CreateOrderInput, opts: DoorFacts = {}): Promise<CreateResult> {
+    await this.requireWriter(caller, "create_order");
     await this.refuseElsewhere(caller, "order");
     const c = withIdempotencyKey(caller, input.idempotency_key);
     // An order for a time is checked by the kitchen before anything is asked or promised (ADR-040): the
     // pause, the slot, delivery, what is served then; a retry of one already made is answered as it was.
     const replay = c.idempotency ? await findIdempotent(this.db, c.idempotency) : null;
+    const pricing = await this.customer.pricingFor(c, input);
+    // An assistant's order (ADR-048): a kind the business takes, from a person it can answer, for products
+    // it sells at its prices in its currency. All of it before the kitchen, a summary or a file.
+    if (!replay) {
+      const offered = await this.refuseNotOffered(c, "order");
+      requireClient(c, input.contact, "order");
+      if (clientRequired(c)) {
+        await checkOrderLines(this.db, input.payload, {
+          pricing,
+          now: nowOf(c),
+          counters: (await readSettings(this.db)).negotiation.priceCounters,
+          ask: askDoor(offered),
+        });
+      }
+    }
     const lang = input.contact?.locale ?? caller.locale ?? "en";
     const checked = replay ? null : await this.food.checkOrder(c, input.payload, { lang });
-    const pricing = await this.customer.pricingFor(c, input);
     const { confirmed, law, returnTerms } = await this.customer.confirmCreate(c, "order", input, pricing);
     const files = await this.trades.prepareFiles(c, input.attachments);
     // The order takes its slot and the daily places in the batch that writes it. Two orders for the
@@ -1716,7 +1783,11 @@ export class Capabilities {
   ): Promise<CreateResult | TransitionResult | ItemView> {
     const c = withToken(withIdempotencyKey(caller, input.idempotency_key), input.access_token);
     if (!input.item_id) {
+      await this.requireWriter(caller, "send_message");
       await this.refuseShut(caller, "message");
+      // From a person the business can answer (ADR-048); a retry of one already written is answered as it was.
+      if (!(c.idempotency && (await findIdempotent(this.db, c.idempotency))))
+        requireClient(c, input.contact, "message");
       return this.people.create(
         c,
         {
@@ -3239,48 +3310,21 @@ async function customerThread(db: Db, itemId: string): Promise<CustomerThreadEnt
 }
 
 /**
- * An agent's booking, or search for times, where agents are told no booking is taken: no service
- * booked at a time with opening hours the owner set. A request for a price or a message still reaches it.
- */
-function notBookableHere(): WriteError {
-  return new WriteError(
-    "not_allowed",
-    "This business takes no bookings from agents yet: it has no service to book with opening hours set. Nothing was written. Ask for a price or send a message instead; its manifest lists what it takes.",
-    { details: { reason: "booking_not_offered", item_type: "booking" } },
-  );
-}
-
-/** An agent's request through a door the owner switched off (`settings.doors`). */
-function doorShut(kind: "booking" | "quote_request" | "message"): WriteError {
-  const what = kind === "booking" ? "bookings" : kind === "quote_request" ? "requests for a price" : "messages";
-  return new WriteError(
-    "not_allowed",
-    `This business takes no ${what} from agents here: its owner switched them off. Nothing was written. Its manifest lists what it does take.`,
-    { details: { reason: "door_shut", item_type: kind } },
-  );
-}
-
-/**
  * The refusal for a kind of request the business takes somewhere else: where to go instead, and what
  * still comes here, from the kinds this inbox lists (`here`): never a door it would refuse too.
  */
-function takenElsewhere(kind: "booking" | "order", door: DoorElsewhere, here: readonly string[]): WriteError {
+function takenElsewhere(kind: "booking" | "order", door: DoorElsewhere, here: readonly ItemType[]): WriteError {
   const what = kind === "booking" ? "bookings" : "orders";
   const place = doorPlace(door);
   const at = place === new URL(door.url).host ? door.url : `${place} (${door.url})`;
-  const messages = here.includes("message");
-  const quotes = here.includes("quote_request");
-  const still =
-    messages && quotes
-      ? " Messages and quote requests still come here."
-      : messages
-        ? " Messages still come here."
-        : quotes
-          ? " Quote requests still come here."
-          : "";
+  // What still comes here, in the business's words, as the manifest lists it.
+  const still = takenHere(
+    here.filter((t) => t === "message" || t === "quote_request"),
+    kind,
+  );
   return new WriteError(
     "not_allowed",
-    `This business takes ${what} at ${at}, not here: send the customer there. Nothing was written.${still}`,
+    `We take ${what} at ${at}, not here: send your person there. Nothing was written.${still ? ` We take ${still} here.` : ""}`,
     {
       details: {
         reason: "taken_elsewhere",

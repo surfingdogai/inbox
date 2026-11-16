@@ -43,11 +43,10 @@ describe("MCP doors", () => {
       "get_business_profile",
       "list_services",
       "list_products",
-      "quote_shipping",
+      // No product on sale at a fixed price: no order is taken here, so neither order tool is listed (ADR-048).
       "check_availability",
       "request_quote",
       "create_booking",
-      "create_order",
       "get_item_status",
       "accept_offer",
       "decline_offer",
@@ -69,7 +68,7 @@ describe("MCP doors", () => {
           startTime: `${DAY}T08:00:00Z`,
           endTime: `${DAY}T09:30:00Z`,
         },
-        contact: { name: "Ana" },
+        contact: { name: "Ana", email: "ana@example.com" },
         idempotency_key: "mcp-1",
       },
     });
@@ -201,7 +200,7 @@ describe("MCP doors", () => {
     expect(thread.map((t) => [t.from, t.text])).toEqual([["us", "Bring your own wetsuit."]]);
   });
 
-  it("orders at the business's price through the public tools, whatever price the assistant sends", async () => {
+  it("orders at the business's price through the public tools: a price of the assistant's own is refused, naming ours", async () => {
     const db = await freshDb();
     const product = ulid();
     await db.orm.insert(schema.products).values({
@@ -215,7 +214,7 @@ describe("MCP doors", () => {
     const client = await connect(createApp({ db }), "/mcp");
     const tools = await client.listTools();
     expect(tools.tools.find((t) => t.name === "create_order")?.description).toContain("business's price");
-    const ordered = await confirmedTool((p) => client.callTool(p), {
+    const refused = await confirmedTool((p) => client.callTool(p), {
       name: "create_order",
       arguments: {
         payload: {
@@ -225,14 +224,23 @@ describe("MCP doors", () => {
         idempotency_key: "mcp-order-1",
       },
     });
+    expect(refused.isError).toBe(true);
+    // Many assistants read only the text: it carries the business's price, in the business's words.
+    const said = (refused.content as { text: string }[])[0]?.text ?? "";
+    expect(said).toContain("A price on this order is not ours: Saddle is €150.00 each.");
+    expect(said).toContain("Fix: payload.orderedItem.0.price (invalid).");
+    // Left out, the business prices it; the same key again is a new request, since nothing was written.
+    const ordered = await confirmedTool((p) => client.callTool(p), {
+      name: "create_order",
+      arguments: { payload: { orderedItem: [{ productId: product, quantity: 1 }] }, idempotency_key: "mcp-order-1" },
+    });
     expect(ordered.isError, JSON.stringify(ordered.content)).toBeFalsy();
     const structured = ordered.structuredContent as { view: { item: { payload: object } } };
     expect(structured.view.item.payload).toMatchObject({
+      orderedItem: [{ productId: product, name: "Saddle", price: { value: 15_000, currency: "EUR" } }],
       totalPrice: { value: 15_000, currency: "EUR" },
-      customerStatedPrice: { value: 100, currency: "EUR" },
     });
-    // Many assistants read only the text: it carries the business's price, in the business's words.
-    expect((ordered.content as { text: string }[])[0]?.text).toContain("Our price is €150.00.");
+    expect(structured.view.item.payload).not.toHaveProperty("customerStatedPrice");
   });
 
   it("does not offer the owner's AI a correction whose time has passed", async () => {

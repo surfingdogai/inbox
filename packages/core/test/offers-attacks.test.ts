@@ -158,7 +158,9 @@ const WED_14 = Date.parse("2026-09-23T13:00:00Z");
 describe("a request that lapsed, taken by automation", () => {
   it("never becomes our offer at a price the business did not set (Q5)", async () => {
     const s = await setup();
-    // The customer's assistant names its own price for a service the catalogue prices "from".
+    // The customer's assistant names its own price for a service the catalogue prices "from": its person's offer,
+    // where the business takes one (ADR-048), and refused where it does not.
+    await s.caps.updateSettings(owner, { doc: { negotiation: { priceCounters: true } } });
     const b = await booking(s, s.from, { totalPrice: EUR(100) });
     const fresh = await fail(transitionItem(s.db, rule, { itemId: b.id, event: "confirm" }));
     expect(fresh.details).toMatchObject({ guard: "business_priced" });
@@ -382,7 +384,9 @@ describe("what a rule sends, as the customer reads it", () => {
 describe("a rule answering a request priced by the customer (Q5)", () => {
   it("does not offer a time at the price the customer's assistant wrote", async () => {
     const s = await setup();
-    // A service the catalogue prices "from": the customer's figure is theirs, for a person to price.
+    // A service the catalogue prices "from": the customer's figure is theirs, for a person to price. An assistant
+    // names one only where the business takes a price of the customer's own (ADR-048).
+    await s.caps.updateSettings(owner, { doc: { negotiation: { priceCounters: true } } });
     const b = await booking(s, s.from, { totalPrice: EUR(100) });
     const keep = { startTime: iso(WED_14), endTime: iso(WED_14 + 60 * MIN) };
     const kept = await transitionItem(s.db, rule, { itemId: b.id, event: "propose", input: keep });

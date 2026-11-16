@@ -3,7 +3,7 @@ import { type Caller, type Capabilities, stayInputs as I, WriteError, withIdempo
 import type { Hono } from "hono";
 import { describeRoute } from "hono-openapi";
 import { z } from "zod";
-import { problemFrom } from "./problem";
+import { problemFrom, problemText } from "./problem";
 import type { CallerEnv } from "./rest";
 import { validator } from "./validate";
 
@@ -24,12 +24,7 @@ const ok = (text: string, structured: unknown): CallToolResult => ({
 
 const failed = (error: unknown): CallToolResult => {
   const p = problemFrom(error);
-  const fields = p.fields?.length ? ` Fix: ${p.fields.map((f) => `${f.path} (${f.problem})`).join(", ")}.` : "";
-  return {
-    content: [{ type: "text", text: `${p.title}: ${p.detail}${fields}` }],
-    structuredContent: { error: p },
-    isError: true,
-  };
+  return { content: [{ type: "text", text: problemText(p) }], structuredContent: { error: p }, isError: true };
 };
 
 /** The terms to show the person before they are bound is the question to put to them, not a failure. */
@@ -49,7 +44,11 @@ async function run(fn: () => Promise<{ text: string; structured: unknown }>, not
   }
 }
 
-/** Whether the inbox takes stays at all: the stays tools are registered only then. */
+/**
+ * Whether the inbox is a place to stay at all, with a property on offer: its rooms and what is free are shown
+ * then, wherever it takes its stays (ADR-037 §6.4), and its stays are taken here only while `stay` is among the
+ * kinds it takes (ADR-048).
+ */
 export async function takesStays(caps: Capabilities): Promise<boolean> {
   const setup = await caps.stays.setup({
     actor: { kind: "system", id: "doors", channel: "system" },
@@ -62,7 +61,28 @@ export async function takesStays(caps: Capabilities): Promise<boolean> {
 export const STAY_INSTRUCTIONS =
   "This is a place to stay. get_property gives its rooms, rates, policies and how it confirms; check_stay_availability gives what is free for dates and guests. A room marked instant comes with an offer: hold_stay holds it, and book_stay books it with the terms_sha your person confirmed. Other rooms are on request: request_stay sends the request, and the property answers with its own quote, which accept_offer takes with its terms_sha. Prices include every tax and fee. cancel_item on a confirmed stay answers with the fee first (fee_sha).";
 
-export function registerPublicStayTools(server: McpServer, caps: Capabilities, caller: Caller): void {
+/**
+ * What an agent is told of a place to stay that takes no stays here (ADR-048): its rooms and what is free still
+ * read here, and where it takes stays instead, `check_stay_availability` gives that page for the dates asked
+ * (`elsewhere`, its link with the dates filled in, ADR-037 §6.4).
+ */
+export function stayInstructionsElsewhere(elsewhere: boolean): string {
+  return elsewhere
+    ? "This is a place to stay that takes its stays on its own booking page, not here. get_property gives its rooms, rates and policies; check_stay_availability gives what is free for dates and guests, and the page to book them at with those dates filled in (elsewhere): send your person there to book. Prices include every tax and fee."
+    : "This is a place to stay that takes no stays here. get_property gives its rooms, rates and policies; check_stay_availability gives what is free for dates and guests. Prices include every tax and fee.";
+}
+
+/**
+ * The guest's assistant's stay tools. `creates`: the property takes stays here (`stay` in its item types,
+ * ADR-048), so `request_stay` and `hold_stay` are listed; without it only what reads, and what follows a stay
+ * already made (`book_stay` on a hold, `change_stay`), is.
+ */
+export function registerPublicStayTools(
+  server: McpServer,
+  caps: Capabilities,
+  caller: Caller,
+  o: { readonly creates?: boolean } = {},
+): void {
   server.registerTool(
     "get_property",
     {
@@ -93,8 +113,12 @@ export function registerPublicStayTools(server: McpServer, caps: Capabilities, c
     (args) =>
       run(async () => {
         const a = await caps.stays.availability(caller, args);
-        const free = a.options.filter((o) => o.status !== "unavailable").length;
-        return { text: `${free} of ${a.options.length} option(s) for ${a.nights} night(s). ${a.words}`, structured: a };
+        const free = a.options.filter((x) => x.status !== "unavailable").length;
+        // Taken on its own booking page: that page, for these dates, is what the assistant gives its person.
+        const words = a.elsewhere
+          ? `This property takes stays on its own booking page, not here: ${a.elsewhere} (for these dates). Send your person there to book.`
+          : a.words;
+        return { text: `${free} of ${a.options.length} option(s) for ${a.nights} night(s). ${words}`, structured: a };
       }),
   );
   server.registerTool(
@@ -112,36 +136,38 @@ export function registerPublicStayTools(server: McpServer, caps: Capabilities, c
         return { text: q.offer ? `${q.offer.summary} ${q.words}` : q.words, structured: q };
       }),
   );
-  server.registerTool(
-    "request_stay",
-    {
-      title: "Request a stay",
-      description:
-        "Send a request for these dates, rooms and guests to the property, which answers with its own quote. Needs the guest's contact and their consent. Keep the access_token: it reads, accepts and cancels this stay later.",
-      inputSchema: I.requestStayInput,
-      annotations: writes,
-    },
-    (args) =>
-      run(async () => {
-        const r = await caps.stays.request(caller, args);
-        return { text: `${r.words} Reference ${r.view.item.id.slice(-6).toUpperCase()}.`, structured: r };
-      }),
-  );
-  server.registerTool(
-    "hold_stay",
-    {
-      title: "Hold an instant room",
-      description:
-        "Hold an instant room from check_stay_availability or quote_stay (offer_id) for the property's hold time, at its offer. Then book_stay with the terms_sha your person confirmed. A room that is not instant is refused: send request_stay instead.",
-      inputSchema: I.holdStayInput,
-      annotations: writes,
-    },
-    (args) =>
-      run(async () => {
-        const r = await caps.stays.hold(caller, args);
-        return { text: `${r.words}${r.summary ? ` ${r.summary}` : ""}`, structured: r };
-      }),
-  );
+  if (o.creates !== false) {
+    server.registerTool(
+      "request_stay",
+      {
+        title: "Request a stay",
+        description:
+          "Send a request for these dates, rooms and guests to the property, which answers with its own quote. Needs the guest's name and an email address or a phone number in contact, and their consent: ask them first, and send only what they agree to give the property; never make them up. Keep the access_token: it reads, accepts and cancels this stay later.",
+        inputSchema: I.requestStayInput,
+        annotations: writes,
+      },
+      (args) =>
+        run(async () => {
+          const r = await caps.stays.request(caller, args);
+          return { text: `${r.words} Reference ${r.view.item.id.slice(-6).toUpperCase()}.`, structured: r };
+        }),
+    );
+    server.registerTool(
+      "hold_stay",
+      {
+        title: "Hold an instant room",
+        description:
+          "Hold an instant room from check_stay_availability or quote_stay (offer_id) for the property's hold time, at its offer. Needs the guest's name and an email address or a phone number in contact, and their consent: ask them first, and send only what they agree to give the property; never make them up. Then book_stay with the terms_sha your person confirmed. A room that is not instant is refused: send request_stay instead.",
+        inputSchema: I.holdStayInput,
+        annotations: writes,
+      },
+      (args) =>
+        run(async () => {
+          const r = await caps.stays.hold(caller, args);
+          return { text: `${r.words}${r.summary ? ` ${r.summary}` : ""}`, structured: r };
+        }),
+    );
+  }
   server.registerTool(
     "book_stay",
     {
@@ -396,13 +422,23 @@ export function stayPublicRoutes(
   );
   app.post(
     "/stays",
-    describeRoute({ tags: ["stays"], summary: "Request a stay" }),
+    describeRoute({
+      tags: ["stays"],
+      summary: "Request a stay",
+      description:
+        "The property answers with its own quote. Needs contact: the guest's name, and an email address or a phone number, as they agreed to give them to the property, and their consent; ask them first, and never make them up (422 invalid_input, details.reason client_details, without them).",
+    }),
     validator("json", I.requestStayInput, h),
     async (c) => created(c, await caps.stays.request(c.get("caller"), withIdem(c, c.req.valid("json")))),
   );
   app.post(
     "/stays/holds",
-    describeRoute({ tags: ["stays"], summary: "Hold an instant room" }),
+    describeRoute({
+      tags: ["stays"],
+      summary: "Hold an instant room",
+      description:
+        "Holds an instant room for the property's hold time, at its offer. Needs contact: the guest's name, and an email address or a phone number, as they agreed to give them to the property, and their consent; ask them first, and never make them up (422 invalid_input, details.reason client_details, without them).",
+    }),
     validator("json", I.holdStayInput, h),
     async (c) => created(c, await caps.stays.hold(c.get("caller"), withIdem(c, c.req.valid("json")))),
   );
