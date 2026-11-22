@@ -14,15 +14,21 @@ import scoreRulesV4 from "../../../packages/spec/vocab/score-rules-v4.json";
 import { AGENT_EXAMPLE, exampleCard } from "../src/lib/agent-example";
 import {
   ago,
+  BOOK_OR_ORDER_HREF,
+  BOOK_OR_ORDER_LABEL,
+  bookOrOrderHref,
   CHECKED_HREF,
   COUNTED,
   countHref,
   countRows,
+  countsView,
+  headline,
   linkCheck,
   looksLikeAddress,
   notYetReal,
   notYetRealLine,
   ownLinkLine,
+  ownPageLine,
   READY_HREF,
   REAL_HREF,
   readDirectory,
@@ -193,6 +199,14 @@ describe("the checker's pages and components", () => {
       expect(config, url).toContain(url);
     }
     expect(config).not.toMatch(/version 6\)/);
+    // The home page's headline and its lists, which are the directory's (/businesses), beside the leaderboards line.
+    // It counts the businesses the directory knows, and claims no more: never "every business".
+    expect(config).toContain(
+      "The home page counts the businesses an assistant can book or order from (agent-ready ones plus those with their own booking or ordering page); the lists are at https://surfingdog.ai/businesses, ?can=book and ?can=order.",
+    );
+    expect(config).not.toMatch(/counts every business/);
+    expect(config).toContain("Leaderboards by category and place,");
+    expect(config).not.toMatch(/links=1/);
   });
 
   it("/search checks a site without script, its hero adds no second check, and the bar and the footer link the checker and the leaderboards", () => {
@@ -462,10 +476,12 @@ describe("the home page and the three products", () => {
   it("what the home page says matches the status pills", () => {
     const home = visible(read("src/pages/index.astro"));
     const counts = visible(read("src/components/DirectoryCounts.astro"));
-    // It lists and tracks agent-ready businesses, counts them (how many were checked stays internal), and its box
-    // checks any address: the directory, the crawler, the businesses it finds and the checker are live.
+    // It lists and tracks agent-ready businesses, counts every business an assistant can book or order from (since
+    // 22 November 2026, the agent-ready one count under it; how many were checked stays internal), and its box checks
+    // any address: the directory, the crawler, the businesses it finds and the checker are live.
     expect(home).toMatch(/lists and tracks agent-ready businesses/);
-    expect(counts).toMatch(/agent-ready businesses/);
+    expect(counts).toContain("{BOOK_OR_ORDER_LABEL}");
+    expect(BOOK_OR_ORDER_LABEL).toBe("businesses an assistant can book or order from");
     expect(counts).not.toMatch(/businesses checked/);
     expect(read("src/components/AskBox.astro")).toMatch(/action="\/check"/);
     for (const id of ["directory", "crawler", "crawled", "checker", "search"]) expect(stateOf(id), id).toBe("live");
@@ -506,6 +522,197 @@ describe("the home page and the three products", () => {
         readDirectory({ directory: { ...zeros, as_of: "2026-11-11T22:00:00Z", by_own_link } })?.byOwnLink,
       ).toBeNull();
     }
+  });
+
+  it("the headline is every business an assistant can book or order from once the network counts them, and each count links to the list of the same businesses", () => {
+    const fmt = (n: number) => new Intl.NumberFormat("en").format(n);
+    const each = (rows: { n: number; label: string; href: string }[]) =>
+      rows.map((r) => `${fmt(r.n)} ${r.label} → ${r.href}`);
+    // A block shaped as the network sends it from 22 November 2026: the agent-ready and what they do, the listings
+    // with their own booking or ordering page, and every business an assistant can book or order from.
+    const block = {
+      checked: 900000,
+      agent_ready: 108566,
+      capabilities: { message: 1210, book: 84, order: 106897, signup: 0, catalogue: 2306, pay: 349, cancel: 0 },
+      doors: { mcp: 2 },
+      by_own_link: { listed: 103670, book: 86073, order: 20479 },
+      book_or_order: { total: 207100, book: 86120, order: 127300 },
+      as_of: "2026-11-22T10:00:00Z",
+    };
+    const d = readDirectory({ directory: block });
+    expect(d?.bookOrOrder).toEqual({ total: 207100, book: 86120, order: 127300 });
+    if (!d) return;
+    expect(headline(d)).toEqual({
+      n: 207100,
+      label: "businesses an assistant can book or order from",
+      href: "/businesses",
+    });
+    // The agent-ready stay, quiet, as the row's first count. Bookings and orders count as the headline does and link
+    // to the directory's lists of the same businesses; every other count is of the agent-ready, as before.
+    expect(each(countRows(d))).toEqual([
+      "108,566 agent-ready → /leaderboard?ready=1",
+      "1,210 take messages → /leaderboard?can=message",
+      "86,120 take bookings → /businesses?can=book",
+      "127,300 take orders → /businesses?can=order",
+      "2,306 have a catalogue → /leaderboard?can=catalogue",
+      "349 take payment → /leaderboard?can=pay",
+    ]);
+    expect(BOOK_OR_ORDER_HREF).toBe("/businesses");
+    expect(bookOrOrderHref("book")).toBe("/businesses?can=book");
+    expect(bookOrOrderHref("order")).toBe("/businesses?can=order");
+    // A leaderboard names the agent-ready alone and reads no booking link (the published rules): no count of those an
+    // assistant can book or order from leads to one, and no link asks a leaderboard for links.
+    const v = countsView(d, fmt);
+    const hrefs = [v.head.href, ...v.rows.map((r) => r.href)];
+    for (const h of hrefs) expect(h, h).not.toMatch(/links=/);
+    expect(hrefs.filter((h) => h.startsWith("/leaderboard"))).toEqual([
+      "/leaderboard?ready=1",
+      "/leaderboard?can=message",
+      "/leaderboard?can=catalogue",
+      "/leaderboard?can=pay",
+    ]);
+    expect(v.head).toEqual(headline(d));
+    expect(v.via).toBe("103,670 of them through their own booking or ordering page");
+    expect(v.links).toBeNull();
+    // The row holds two groups: bookings and orders count the headline's businesses, while the agent-ready are not all
+    // among them (at most 84 + 106,897 of the 108,566 take bookings or orders), and messages, a catalogue and payment
+    // count the agent-ready alone. The page shows the row as it is, with no name of its own; a screen reader hears whose
+    // count each one is. The live region groups them as the network's /check line does: the headline with its bookings
+    // and orders and how many through their own page, then the agent-ready with what they do.
+    expect(v.rowsLabel).toBeNull();
+    expect(v.note).toBe("Live counts from the network · updated ");
+    expect(v.said).toBe(
+      "207,100 businesses an assistant can book or order from. Of them, 86,120 take bookings and 127,300 take orders; 103,670 through their own booking or ordering page. 108,566 businesses are agent-ready. Of those, 1,210 take messages, 2,306 have a catalogue, 349 take payment.",
+    );
+    // No count of the agent-ready is said as one of the headline's, nor bookings and orders as the agent-ready's.
+    const [ofHead = "", ofReady = ""] = v.said.split(" 108,566 businesses are agent-ready. ");
+    expect(ofHead).toMatch(/^207,100 [^.]+\. Of them, 86,120 take bookings and 127,300 take orders; 103,670 [^.]+\.$/);
+    expect(ofReady).toBe("Of those, 1,210 take messages, 2,306 have a catalogue, 349 take payment.");
+    expect(v.said.match(/Of them/g)).toHaveLength(1);
+    expect(v.said).not.toContain(":");
+    expect(v.said).not.toMatch(/Of the agent-ready|By what/);
+    // Each link is named by the words the page shows, final number first (so the name holds what the eye reads), then
+    // whose count it is, as the list it leads to counts them.
+    expect(v.rows.map((r) => `${r.name} → ${r.href}`)).toEqual([
+      "108,566 agent-ready businesses → /leaderboard?ready=1",
+      "1,210 take messages, of the agent-ready businesses → /leaderboard?can=message",
+      "86,120 take bookings, of the businesses an assistant can book or order from → /businesses?can=book",
+      "127,300 take orders, of the businesses an assistant can book or order from → /businesses?can=order",
+      "2,306 have a catalogue, of the agent-ready businesses → /leaderboard?can=catalogue",
+      "349 take payment, of the agent-ready businesses → /leaderboard?can=pay",
+    ]);
+    for (const r of v.rows) expect(r.name.startsWith(`${fmt(r.n)} ${r.label}`), r.name).toBe(true);
+
+    // A network that does not send it yet gets the page as it was, word for word and number for number.
+    const before = readDirectory({ directory: { ...block, book_or_order: undefined } });
+    expect(before?.bookOrOrder).toBeNull();
+    if (!before) return;
+    const old = countsView(before, fmt);
+    expect(old.head).toEqual({ n: 108566, label: "agent-ready businesses", href: "/leaderboard?ready=1" });
+    expect(each(old.rows)).toEqual([
+      "1,210 take messages → /leaderboard?can=message",
+      "84 take bookings → /leaderboard?can=book",
+      "106,897 take orders → /leaderboard?can=order",
+      "2,306 have a catalogue → /leaderboard?can=catalogue",
+      "349 take payment → /leaderboard?can=pay",
+    ]);
+    expect(old.via).toBeNull();
+    expect(old.links).toBe(
+      "103,670 businesses an assistant can book or order from through their own booking or ordering page.",
+    );
+    expect(old.rowsLabel).toBe("Of the agent-ready businesses");
+    expect(old.note).toBe("Of the agent-ready businesses · updated ");
+    expect(old.said).toBe(
+      "108,566 agent-ready businesses. Of them, 1,210 take messages, 84 take bookings, 106,897 take orders, 2,306 have a catalogue, 349 take payment. 103,670 businesses an assistant can book or order from through their own booking or ordering page.",
+    );
+    // Each link named by its words alone, as it was: the row's name says whose counts they are.
+    expect(old.rows.map((r) => r.name)).toEqual(old.rows.map((r) => `${fmt(r.n)} ${r.label}`));
+
+    // None counted, a count it could not read, a block not whole, or three that do not hold together: the page as it
+    // was, never a 0 or a guess, and no count of the agent-ready leads to the directory's lists.
+    for (const book_or_order of [
+      { total: 0, book: 0, order: 0 },
+      { total: "207100", book: 86120, order: 127300 },
+      { total: 207100, book: 86120 },
+      { total: 207100, book: -1, order: 127300 },
+      { total: 120000, book: 86120, order: 127300 }, // fewer than those it can order from
+      { total: 220000, book: 86120, order: 127300 }, // more than both added up
+      null,
+    ]) {
+      const x = readDirectory({ directory: { ...block, book_or_order } });
+      expect(x?.bookOrOrder, JSON.stringify(book_or_order)).toBeNull();
+      if (!x) continue;
+      const was = countsView(x, fmt);
+      expect(was.head.href, JSON.stringify(book_or_order)).toBe("/leaderboard?ready=1");
+      expect(was.rowsLabel, JSON.stringify(book_or_order)).toBe("Of the agent-ready businesses");
+      expect(was.rows.map((r) => r.href).filter((h) => !h.startsWith("/leaderboard?can="))).toEqual([]);
+    }
+
+    // The quiet line under the headline only adds: none without the listings' count, none when it would repeat the
+    // headline, and one said as one. One business in all is one business.
+    const dir = (over: Record<string, unknown>) => readDirectory({ directory: { ...block, ...over } });
+    const noLinks = dir({ by_own_link: undefined });
+    expect(noLinks && ownPageLine(noLinks, fmt)).toBeNull();
+    expect(noLinks && countsView(noLinks, fmt).said).toBe(
+      "207,100 businesses an assistant can book or order from. Of them, 86,120 take bookings and 127,300 take orders. 108,566 businesses are agent-ready. Of those, 1,210 take messages, 2,306 have a catalogue, 349 take payment.",
+    );
+    const allOfThem = dir({ by_own_link: { listed: 207100, book: 86120, order: 127300 } });
+    expect(allOfThem && ownPageLine(allOfThem, fmt)).toBeNull();
+    expect(allOfThem && countsView(allOfThem, fmt).said).toBe(noLinks && countsView(noLinks, fmt).said);
+    const one = dir({ by_own_link: { listed: 1, book: 1, order: 0 } });
+    expect(one && ownPageLine(one, fmt)).toBe("One of them through its own booking or ordering page");
+    expect(one && countsView(one, fmt).said).toContain(
+      " Of them, 86,120 take bookings and 127,300 take orders; one through its own booking or ordering page. ",
+    );
+    const single = dir({ book_or_order: { total: 1, book: 1, order: 0 }, by_own_link: undefined });
+    expect(single && headline(single).label).toBe("business an assistant can book or order from");
+    // One agent-ready business is one business, in the live region and in its link's name.
+    const oneReady = dir({ agent_ready: 1, capabilities: { message: 1, book: 0, order: 1, catalogue: 0, pay: 0 } });
+    expect(oneReady && countsView(oneReady, fmt).said).toContain(" 1 business is agent-ready. Of those, ");
+    expect(oneReady && countsView(oneReady, fmt).rows[0]?.name).toBe("1 agent-ready business");
+
+    // The page: at rest the headline reads as it will, dashes beside its words and linked to its list (/businesses),
+    // and it stays so when the counts do not answer; the quiet line sits right under it, before the row; the old line
+    // under the row stays for a network that does not count them.
+    const counts = read("src/components/DirectoryCounts.astro");
+    expect(counts).toContain(
+      '<a class="c-head c-link" href={BOOK_OR_ORDER_HREF} data-head><b class="c-n tabular" data-head-n aria-hidden="true">–</b>&nbsp;<span data-head-label>{BOOK_OR_ORDER_LABEL}</span></a>',
+    );
+    const at = (s: string) => counts.indexOf(s);
+    const failed = /if \(!d\) \{[^}]*return;\s*\}/.exec(counts)?.[0] ?? "";
+    expect(failed).toContain("The counts are not answering just now.");
+    expect(failed).not.toMatch(/head|href/);
+    expect(at("if (!d) {")).toBeLessThan(at("head.href = v.head.href;"));
+    expect(at('class="c-main"')).toBeLessThan(at('<p class="c-via" data-via hidden></p>'));
+    expect(at('class="c-via"')).toBeLessThan(at('class="c-caps"'));
+    expect(at('class="c-caps"')).toBeLessThan(at('<p class="c-links" data-links hidden></p>'));
+    // The row carries no name of its own in the page; the fallback names it, as it was, from countsView.
+    expect(counts).toContain('<ul class="c-caps" data-caps hidden></ul>');
+    expect(counts).not.toMatch(/ROWS_LABEL|By what/);
+    // It paints what countsView says: the live region once; the headline's words, its number and its name by its final
+    // number; and each count named as countsView names it.
+    expect(counts).toContain("const v = countsView(d, fmt.format);");
+    expect(counts).toContain('<p class="sr" aria-live="polite" data-said></p>');
+    expect(counts).toContain("if (said) said.textContent = v.said;");
+    expect(counts).toContain("headLabel.textContent = v.head.label;");
+    expect(counts).toContain("count(headN, v.head.n);");
+    expect(counts).toMatch(
+      /head\.setAttribute\("aria-label", `\$\{fmt\.format\(v\.head\.n\)\} \$\{v\.head\.label\}`\);/,
+    );
+    expect(counts).toContain('a.setAttribute("aria-label", r.name);');
+    expect(counts).toMatch(
+      /if \(v\.rowsLabel\) caps\.setAttribute\("aria-label", v\.rowsLabel\);\s+else caps\.removeAttribute\("aria-label"\);/,
+    );
+    expect(counts).toContain("note.replaceChildren(v.note, t);");
+    expect(counts).toMatch(/if \(via && v\.via\) \{\s+via\.textContent = v\.via;\s+via\.hidden = false;/);
+    expect(counts).toMatch(/if \(links && v\.links\) \{\s+links\.textContent = v\.links;\s+links\.hidden = false;/);
+    // No motion under reduced motion, the new line's arrival too; and its words wrap on a phone, never off its edge.
+    expect(counts).toContain("if (still || n < 3)");
+    expect(counts.replace(/\s+/g, " ")).toMatch(
+      /@media \(prefers-reduced-motion: reduce\) \{[^}]*\.counts\.is-in \.c-via,[^}]*\{ animation: none; \}/,
+    );
+    expect(counts.replace(/\s+/g, " ")).toContain(".c-head { text-wrap: balance; }");
+    expect(counts).not.toContain("c-pair");
   });
 
   it("the counts read the directory block, say nothing they did not read, and hide empty optional rows", () => {
@@ -590,13 +797,20 @@ describe("the home page and the three products", () => {
     expect(READY_HREF).toBe("/leaderboard?ready=1");
     expect(REAL_HREF).toBe("/leaderboard?real=1");
     for (const c of COUNTED) expect(countHref(c.key)).toBe(`/leaderboard?can=${c.key}`);
+    // From a network that does not count book_or_order, every row is one of the agent-ready, read as such, and
+    // links to the agent-ready that do it.
+    expect(countRows(d).map((r) => r.href)).toEqual(countRows(d).map((r) => `/leaderboard?can=${r.key}`));
+    expect(countsView(d, String).said).toBe(
+      "300 agent-ready businesses. Of them, 200 take messages, 0 take bookings, 5 take orders, 9 have a catalogue, 1 take payment, 4 negotiate.",
+    );
     const counts = read("src/components/DirectoryCounts.astro");
     expect(counts).not.toMatch(/CHECKED_HREF/); // how many were checked stays internal
-    expect(counts).toMatch(/href=\{READY_HREF\}/);
-    // Every count is one of the agent-ready, read as such: no second count of some "real" kind beside it.
+    // No second count of some "real" kind beside the others.
     expect(counts).not.toMatch(/REAL_HREF|real businesses|data-real|notYetReal/);
-    expect(counts).toContain("Of them, ${rows.join");
-    expect(counts).toMatch(/a\.href = countHref\(r\.key\)/);
+    // The headline and each row link where countsView says.
+    expect(counts).toMatch(/href=\{BOOK_OR_ORDER_HREF\}/);
+    expect(counts).toContain("head.href = v.head.href;");
+    expect(counts).toContain("a.href = r.href;");
     expect(counts.indexOf('class="c-caps"')).toBeLessThan(counts.indexOf('class="c-note"'));
     const at = Date.parse("2026-10-07T12:00:00Z");
     expect(ago("2026-10-07T12:00:00Z", at + 20_000)).toBe("just now");
@@ -751,7 +965,7 @@ describe("the home page and the three products", () => {
 
   it("every internal link in the bar, the footer and the product pages goes somewhere", () => {
     // Paths the network answers on this address (the proxy's list), and files in public/.
-    const proxied = [/^\/check$/, /^\/leaderboard/, /^\/v1\//, /^\/mcp$/, /^\/b\//];
+    const proxied = [/^\/check$/, /^\/leaderboard/, /^\/businesses(\.json)?$/, /^\/v1\//, /^\/mcp$/, /^\/b\//];
     const pages = [
       "src/components/Nav.astro",
       "src/components/Footer.astro",
@@ -788,6 +1002,16 @@ describe("the home page and the three products", () => {
     for (const path of pages) {
       const hrefs = [...read(path).matchAll(/href(?:=|: )["'`](\/[^"'`{]*)["'`]/g)].map((m) => m[1] ?? "");
       for (const h of hrefs) expect(exists(h), `${path}: ${h}`).toBe(true);
+    }
+    // The home page's counts link where src/lib/ask.ts says (DirectoryCounts.astro writes no path of its own).
+    for (const h of [
+      BOOK_OR_ORDER_HREF,
+      bookOrOrderHref("book"),
+      bookOrOrderHref("order"),
+      READY_HREF,
+      ...COUNTED.map((c) => countHref(c.key)),
+    ]) {
+      expect(exists(h), `DirectoryCounts.astro: ${h}`).toBe(true);
     }
   });
 });
