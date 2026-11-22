@@ -50,6 +50,14 @@ export interface DirectoryStats {
    * leave them out. Null from a network that does not count them, and when it counts none.
    */
   byOwnLink: { listed: number; book: number; order: number } | null;
+  /**
+   * Every business an assistant can book or order from (`book_or_order`, the home page's headline since 22 November
+   * 2026): the agent-ready that take bookings or orders through a door on their own site, together with the public
+   * listings `by_own_link` counts, each business once. `book` and `order` count the same for bookings and for orders.
+   * Null from a network that does not send it yet, when it counts none, and when the three do not hold together: a
+   * total below either part, or above both parts added up.
+   */
+  bookOrOrder: { total: number; book: number; order: number } | null;
   as_of: string;
 }
 
@@ -93,6 +101,22 @@ export function countHref(key: CapabilityKey): string {
   return `/leaderboard?can=${key}`;
 }
 
+/**
+ * The directory's lists of the businesses an assistant can book or order from (`book_or_order`), on the network at
+ * /businesses on this same address: every one of them (the headline), those it can book (`?can=book`) and those it can
+ * order from (`?can=order`). Each is the same businesses as its count: the agent-ready that do it through a door on
+ * their own site, and the listings with their own booking or ordering page. They are directory lists, not leaderboards:
+ * by the published rules a leaderboard names the agent-ready alone and reads no booking link, so /leaderboard?can=book
+ * stays the agent-ready that take bookings.
+ */
+export const BOOK_OR_ORDER_HREF = "/businesses";
+export function bookOrOrderHref(key: "book" | "order"): string {
+  return `/businesses?can=${key}`;
+}
+
+/** The headline's words beside its number, at rest and once the network counts them. */
+export const BOOK_OR_ORDER_LABEL = "businesses an assistant can book or order from";
+
 /** Counts taken before this are no counts: the network sends the zero time when it has none yet. */
 const EARLIEST = Date.parse("2026-01-01T00:00:00Z");
 
@@ -123,6 +147,12 @@ export function readDirectory(stats: unknown): DirectoryStats | null {
     l && n(l.listed) && n(l.book) && n(l.order) && (l.listed as number) > 0
       ? { listed: l.listed as number, book: l.book as number, order: l.order as number }
       : null;
+  const b =
+    o.book_or_order && typeof o.book_or_order === "object" ? (o.book_or_order as Record<string, unknown>) : null;
+  const bookOrOrder =
+    b && n(b.total) && n(b.book) && n(b.order) && holds(b.total as number, b.book as number, b.order as number)
+      ? { total: b.total as number, book: b.book as number, order: b.order as number }
+      : null;
   return {
     checked: o.checked as number,
     agent_ready: o.agent_ready as number,
@@ -132,8 +162,17 @@ export function readDirectory(stats: unknown): DirectoryStats | null {
         : null,
     capabilities: caps,
     byOwnLink,
+    bookOrOrder,
     as_of: o.as_of,
   };
+}
+
+/**
+ * Whether a count of those an assistant can book or order from holds with its parts: some counted, none fewer than
+ * those it can book or those it can order from, none more than both added up (each business is one of them, or both).
+ */
+function holds(total: number, book: number, order: number): boolean {
+  return total > 0 && total >= book && total >= order && total <= book + order;
 }
 
 /** The line under the counts: "51,291 businesses an assistant can book or order from through their own booking or
@@ -144,11 +183,159 @@ export function ownLinkLine(x: { listed: number }, format: (n: number) => string
     : `${format(x.listed)} businesses an assistant can book or order from through their own booking or ordering page.`;
 }
 
-/** The rows to show, from the block. */
-export function countRows(d: DirectoryStats): { key: CapabilityKey; label: string; n: number }[] {
-  return COUNTED.map((c) => ({ key: c.key, label: c.label, n: d.capabilities[c.key] ?? 0, always: c.always }))
+/**
+ * The headline: how many, in what words, and the list of the same businesses. Every business an assistant can book or
+ * order from, once the network counts them; from a network that does not yet, the agent-ready, as before.
+ */
+export function headline(d: DirectoryStats): { n: number; label: string; href: string } {
+  const b = d.bookOrOrder;
+  if (!b) return { n: d.agent_ready, label: "agent-ready businesses", href: READY_HREF };
+  return {
+    n: b.total,
+    label: b.total === 1 ? "business an assistant can book or order from" : BOOK_OR_ORDER_LABEL,
+    href: BOOK_OR_ORDER_HREF,
+  };
+}
+
+/** A count under the headline: what it counts, how many, and the list of the same businesses. */
+export interface CountRow {
+  key: CapabilityKey | "ready";
+  label: string;
+  n: number;
+  href: string;
+}
+
+/**
+ * The rows to show, from the block. From a network that counts every business an assistant can book or order from,
+ * the agent-ready come first, as a count of their own, and bookings and orders count those an assistant can book or
+ * order from, with the lists of the same businesses; every other row counts the agent-ready that do it. From one that
+ * does not yet, every row counts the agent-ready, as before.
+ */
+export function countRows(d: DirectoryStats): CountRow[] {
+  const b = d.bookOrOrder;
+  const rows = COUNTED.map((c) => {
+    const withPages = b && (c.key === "book" || c.key === "order") ? c.key : null;
+    return {
+      key: c.key,
+      label: c.label,
+      n: b && withPages ? b[withPages] : (d.capabilities[c.key] ?? 0),
+      href: withPages ? bookOrOrderHref(withPages) : countHref(c.key),
+      always: c.always,
+    };
+  })
     .filter((r) => r.always || r.n > 0)
-    .map(({ key, label, n }) => ({ key, label, n }));
+    .map(({ key, label, n, href }): CountRow => ({ key, label, n, href }));
+  return b ? [{ key: "ready", label: "agent-ready", n: d.agent_ready, href: READY_HREF }, ...rows] : rows;
+}
+
+/**
+ * How many of the businesses an assistant can book or order from are listed with their own booking or ordering page:
+ * every listing `by_own_link` counts is one of them, counted in the same pass. Null without both counts, and when it
+ * would only repeat the headline: every one of them.
+ */
+function ownPageCount(d: DirectoryStats): number | null {
+  const b = d.bookOrOrder;
+  const l = d.byOwnLink;
+  return b && l && l.listed < b.total ? l.listed : null;
+}
+
+/** The quiet line right under the headline: "103,670 of them through their own booking or ordering page". */
+export function ownPageLine(d: DirectoryStats, format: (n: number) => string): string | null {
+  const n = ownPageCount(d);
+  if (n === null) return null;
+  return n === 1
+    ? "One of them through its own booking or ordering page"
+    : `${format(n)} of them through their own booking or ordering page`;
+}
+
+/** A count as the page paints it: its row, and what a screen reader hears for its link. */
+export interface CountLink extends CountRow {
+  /**
+   * The link's name: the words the page shows, final number first, then, once the network counts those an assistant
+   * can book or order from, whose count it is ("1,210 take messages, of the agent-ready businesses").
+   */
+  name: string;
+}
+
+/** What the counts show, from one answer: the page paints it, and a screen reader hears `said`, once. */
+export interface CountsView {
+  head: { n: number; label: string; href: string };
+  /** The quiet line right under the headline; null for none. */
+  via: string | null;
+  rows: CountLink[];
+  /** The rows' name for a screen reader; null for none, where the row holds two groups and each link names its own. */
+  rowsLabel: string | null;
+  /** The line under the rows, from a network that does not count book_or_order yet; null for none. */
+  links: string | null;
+  /** The note's words, before how long ago the counts were taken. */
+  note: string;
+  /** The final numbers in words, for the live region. */
+  said: string;
+}
+
+/**
+ * Everything the counts say, from the block. From a network that does not send `book_or_order` yet, the page as it was
+ * before 22 November 2026, word for word: the agent-ready as the headline, every row of them, and the own-link line
+ * under the rows.
+ *
+ * Otherwise the row holds two groups. Bookings and orders count the headline's businesses; the agent-ready are not all
+ * among them, and messages, a catalogue and payment count the agent-ready alone. The page shows the row as it is, and
+ * a screen reader hears whose count each one is. Each link's name says it after the words the page shows, and the
+ * live region groups the counts as the network's /check line does: "207,100 businesses an assistant can book or order
+ * from. Of them, 86,120 take bookings and 127,300 take orders; 103,670 through their own booking or ordering page.
+ * 108,566 businesses are agent-ready. Of those, 1,210 take messages, 2,306 have a catalogue, 349 take payment."
+ */
+export function countsView(d: DirectoryStats, format: (n: number) => string): CountsView {
+  const head = headline(d);
+  const top = `${format(head.n)} ${head.label}.`;
+  const words = (r: CountRow) => `${format(r.n)} ${r.label}`;
+  if (!d.bookOrOrder) {
+    const rows = countRows(d).map((r) => ({ ...r, name: words(r) }));
+    const links = d.byOwnLink ? ownLinkLine(d.byOwnLink, format) : null;
+    return {
+      head,
+      via: null,
+      rows,
+      rowsLabel: "Of the agent-ready businesses",
+      links,
+      note: "Of the agent-ready businesses · updated ",
+      said: `${top}${rows.length ? ` Of them, ${rows.map(words).join(", ")}.` : ""}${links ? ` ${links}` : ""}`,
+    };
+  }
+  const ofHead = (r: CountRow) => r.key === "book" || r.key === "order";
+  const rows = countRows(d).map((r) => ({
+    ...r,
+    name:
+      r.key === "ready"
+        ? `${format(r.n)} agent-ready ${r.n === 1 ? "business" : "businesses"}`
+        : `${words(r)}, of the ${ofHead(r) ? "businesses an assistant can book or order from" : "agent-ready businesses"}`,
+  }));
+  const own = ownPageCount(d);
+  const ofThem = [
+    rows.filter(ofHead).map(words).join(" and "),
+    own === null
+      ? ""
+      : own === 1
+        ? "one through its own booking or ordering page"
+        : `${format(own)} through their own booking or ordering page`,
+  ].filter(Boolean);
+  const ready = rows.find((r) => r.key === "ready");
+  const ofThose = rows.filter((r) => r.key !== "ready" && !ofHead(r)).map(words);
+  const said = [top];
+  if (ofThem.length) said.push(`Of them, ${ofThem.join("; ")}.`);
+  if (ready) {
+    said.push(ready.n === 1 ? "1 business is agent-ready." : `${format(ready.n)} businesses are agent-ready.`);
+    if (ofThose.length) said.push(`Of those, ${ofThose.join(", ")}.`);
+  }
+  return {
+    head,
+    via: ownPageLine(d, format),
+    rows,
+    rowsLabel: null,
+    links: null,
+    note: "Live counts from the network · updated ",
+    said: said.join(" "),
+  };
 }
 
 /**

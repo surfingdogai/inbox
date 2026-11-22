@@ -1,35 +1,56 @@
 ---
 /**
- * The live counts: how many businesses are agent-ready (how many were checked stays internal), and of
- * those how many take messages, bookings, orders and payment or have a catalogue. Read in the
- * browser from GET /v1/stats on this same address (its "directory" block, counted at most every ten
- * minutes by the network). Aggregates only: the block never names a business.
+ * The live counts. The headline is every business an assistant can book or order from (since 22 November
+ * 2026): the agent-ready that take bookings or orders through a door on their own site, and the public
+ * listings with the business's own booking or ordering page, each business once ("book_or_order").
+ * Right under it, one quiet line: how many of them through their own booking or ordering page
+ * ("by_own_link"), left out when it would only repeat the headline. Then the row of counts: the
+ * agent-ready, as a count of their own, and how many take messages, bookings, orders and payment or
+ * have a catalogue. Bookings and orders count as the headline does, those pages too; the other counts
+ * are of the agent-ready. How many were checked stays internal.
  *
- * At rest, before the answer or without one, the page shows dashes and says where the numbers come
- * from; it never prints a number it did not read (nor zeros the network says it could not take).
- * The numbers count up once, gently, and not at all under reduced motion. The counting is hidden
- * from screen readers: a separate live region says the final numbers once, and each link is named by
- * its final number.
+ * A network that does not send "book_or_order" yet gets the counts as they were, word for word: the
+ * agent-ready as the headline, every count of them ("Of the agent-ready businesses"), and the own-link
+ * line under the row. What each says is worked out in src/lib/ask.ts (countsView), where the site's
+ * tests read it without a browser.
  *
- * Every count is a link to the list of the businesses it counts, on the network: "agent-ready"
- * to every agent-ready business, and each capability to the agent-ready businesses that can do it
- * (/leaderboard?can=book). Each list is the same businesses its count counts: it names them, or says
- * how many more it counts and does not name. Every one of them is a business; no count sorts them
- * into kinds of real.
+ * Read in the browser from GET /v1/stats on this same address (its "directory" block, counted at most
+ * every ten minutes by the network). Aggregates only: the block never names a business.
+ *
+ * At rest, before the answer or without one, the page shows dashes beside the headline's words, linked
+ * to their list, and says where the numbers come from; it never prints a number it did not read (nor
+ * zeros the network says it could not take). The numbers count up once, gently, and not at all under
+ * reduced motion. The counting is hidden from screen readers: a separate live region says the final
+ * numbers once, and each link is named by its final number and the words the page shows. The row
+ * holds two groups (bookings and orders count the headline's businesses, the other counts the
+ * agent-ready alone), so a screen reader hears whose count each one is: each link's name ends with
+ * it ("1,210 take messages, of the agent-ready businesses"), and the live region groups the counts
+ * as the network's /check line does, the headline with its bookings and orders, then the agent-ready
+ * with what they do. The page shows the row as it is, with no name of its own.
+ *
+ * Every count in the headline and the row is a link to the list of the businesses it counts, on the
+ * network: the headline to all of them (/businesses), "take bookings" and "take orders" to those an
+ * assistant can book, or order from (/businesses?can=book, the directory's lists), "agent-ready" to
+ * every agent-ready business, and each other capability to the agent-ready businesses that can do it
+ * (/leaderboard?can=message). Each list is the same businesses its count counts: it names them, or
+ * says how many more it counts and does not name. Every one of them is a business; no count sorts
+ * them into kinds of real. The quiet line is no link: every business it counts is on the headline's
+ * list, and no list names them alone.
  *
  * Under them, one quiet line from the same answer: the requests AI agents sent the network in the
  * last seven days and the busiest day's agents ("agent_requests", src/lib/agent-requests.ts),
  * linking to the note on what counts. No block, or no requests, is no line: never a 0.
  */
 import { AGENT_REQUESTS_HREF } from "../lib/agent-requests";
-import { READY_HREF } from "../lib/ask";
+import { BOOK_OR_ORDER_HREF, BOOK_OR_ORDER_LABEL } from "../lib/ask";
 ---
 
 <div class="counts" data-counts>
   <p class="c-main">
-    <a class="c-pair c-link" href={READY_HREF} data-label="agent-ready businesses"><b class="c-n tabular" data-n="agent_ready" aria-hidden="true">–</b> agent-ready businesses</a>
+    <a class="c-head c-link" href={BOOK_OR_ORDER_HREF} data-head><b class="c-n tabular" data-head-n aria-hidden="true">–</b>&nbsp;<span data-head-label>{BOOK_OR_ORDER_LABEL}</span></a>
   </p>
-  <ul class="c-caps" data-caps aria-label="Of the agent-ready businesses" hidden></ul>
+  <p class="c-via" data-via hidden></p>
+  <ul class="c-caps" data-caps hidden></ul>
   <p class="c-links" data-links hidden></p>
   <p class="c-note" data-note>Live counts from the network.</p>
   <p class="c-agents" data-agents hidden><a class="c-link" href={AGENT_REQUESTS_HREF}></a></p>
@@ -53,8 +74,10 @@ import { READY_HREF } from "../lib/ask";
     font-size: var(--fs-ui);
     color: var(--ink-2);
   }
-  .c-pair {
-    white-space: nowrap;
+  /* The headline's words wrap where a phone is too narrow for them, in lines of even length; the
+     number keeps to the word after it. */
+  .c-head {
+    text-wrap: balance;
   }
   /* A count is a link to its list: a faint underline at rest says so, drawn in full on hover and
      focus (a link told from text by more than colour, WCAG 1.4.1). */
@@ -122,11 +145,17 @@ import { READY_HREF } from "../lib/ask";
   }
   .c-note,
   .c-links,
+  .c-via,
   .c-agents {
     margin: 0;
     font-size: var(--fs-fine);
     letter-spacing: 0.02em;
     color: var(--ink-3);
+  }
+  /* How many of them through their own page says something of the headline: it sits close under it. */
+  .c-via {
+    margin-top: calc(var(--sp-1) * -1);
+    text-wrap: balance;
   }
   .c-agents :global(.ar-part) {
     white-space: nowrap;
@@ -144,6 +173,7 @@ import { READY_HREF } from "../lib/ask";
   .counts.is-in .c-caps,
   .counts.is-in .c-note,
   .counts.is-in .c-links,
+  .counts.is-in .c-via,
   .counts.is-in .c-agents {
     animation: counts-in var(--dur-slow) var(--ease) both;
   }
@@ -157,6 +187,7 @@ import { READY_HREF } from "../lib/ask";
     .counts.is-in .c-caps,
     .counts.is-in .c-note,
     .counts.is-in .c-links,
+    .counts.is-in .c-via,
     .counts.is-in .c-agents {
       animation: none;
     }
@@ -165,7 +196,7 @@ import { READY_HREF } from "../lib/ask";
 
 <script>
   import { paintAgentRequests, readAgentRequests } from "../lib/agent-requests";
-  import { ago, countHref, countRows, ownLinkLine, readDirectory } from "../lib/ask";
+  import { ago, countsView, readDirectory } from "../lib/ask";
 
   const root = document.querySelector<HTMLElement>("[data-counts]");
   const fmt = new Intl.NumberFormat("en");
@@ -217,29 +248,36 @@ import { READY_HREF } from "../lib/ask";
       if (note) note.textContent = noBlock ? "Counts appear here once the crawler publishes them." : "The counts are not answering just now.";
       return;
     }
+    // What the counts say, from the block: every business an assistant can book or order from, or, from
+    // a network that does not count them yet, the agent-ready, as before (countsView).
+    const v = countsView(d, fmt.format);
     // The animated numbers are for the eye; a screen reader hears the final ones, once, and each
-    // link by its final number.
-    if (said) {
-      const rows = countRows(d).map((r) => `${fmt.format(r.n)} ${r.label}`);
-      said.textContent =
-        `${fmt.format(d.agent_ready)} agent-ready businesses.` +
-        (rows.length ? ` Of them, ${rows.join(", ")}.` : "") +
-        (d.byOwnLink ? ` ${ownLinkLine(d.byOwnLink, fmt.format)}` : "");
+    // link by its final number and whose count it is.
+    if (said) said.textContent = v.said;
+    const head = root.querySelector<HTMLAnchorElement>("[data-head]");
+    const headN = root.querySelector<HTMLElement>("[data-head-n]");
+    const headLabel = root.querySelector<HTMLElement>("[data-head-label]");
+    if (head && headN && headLabel) {
+      head.href = v.head.href;
+      headLabel.textContent = v.head.label;
+      head.setAttribute("aria-label", `${fmt.format(v.head.n)} ${v.head.label}`);
+      count(headN, v.head.n);
     }
-    for (const el of Array.from(root.querySelectorAll<HTMLElement>("[data-n]"))) {
-      const n = d.agent_ready;
-      count(el, n);
-      const link = el.closest<HTMLAnchorElement>("a");
-      link?.setAttribute("aria-label", `${fmt.format(n)} ${link.dataset.label ?? ""}`.trim());
+    const via = root.querySelector<HTMLElement>("[data-via]");
+    if (via && v.via) {
+      via.textContent = v.via;
+      via.hidden = false;
     }
     if (caps) {
+      if (v.rowsLabel) caps.setAttribute("aria-label", v.rowsLabel);
+      else caps.removeAttribute("aria-label");
       caps.replaceChildren(
-        ...countRows(d).map((r) => {
+        ...v.rows.map((r) => {
           const li = document.createElement("li");
           const a = document.createElement("a");
           const b = document.createElement("b");
-          a.href = countHref(r.key);
-          a.setAttribute("aria-label", `${fmt.format(r.n)} ${r.label}`);
+          a.href = r.href;
+          a.setAttribute("aria-label", r.name);
           b.setAttribute("aria-hidden", "true");
           a.append(b, ` ${r.label}`);
           li.append(a);
@@ -250,8 +288,8 @@ import { READY_HREF } from "../lib/ask";
       caps.hidden = false;
     }
     const links = root.querySelector<HTMLElement>("[data-links]");
-    if (links && d.byOwnLink) {
-      links.textContent = ownLinkLine(d.byOwnLink, fmt.format);
+    if (links && v.links) {
+      links.textContent = v.links;
       links.hidden = false;
     }
     if (note) {
@@ -259,7 +297,7 @@ import { READY_HREF } from "../lib/ask";
       t.dateTime = d.as_of;
       t.title = new Date(d.as_of).toLocaleString();
       t.textContent = ago(d.as_of);
-      note.replaceChildren("Of the agent-ready businesses · updated ", t);
+      note.replaceChildren(v.note, t);
     }
     root.classList.add("is-in");
   }
