@@ -9,9 +9,9 @@ jobs:
     name: check · typecheck · client build · test (node + workers) · kit
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: 24
           cache: pnpm
@@ -29,7 +29,7 @@ jobs:
     name: wordpress plugin · lint · test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       # The runner's own PHP: every file parses, and the plugin's tests (WordPress stood in for)
       # hold its lines to packages/spec/vectors/discovery.json.
       - run: php --version
@@ -40,9 +40,9 @@ jobs:
     name: site · typecheck · build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: 24
           cache: pnpm
